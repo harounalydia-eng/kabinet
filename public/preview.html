@@ -1,0 +1,9 @@
+<!doctype html><html><head><meta charset="utf-8"><title>KABINET device preview</title>
+<style>html,body{margin:0;background:#111;min-height:100vh}body{display:flex;justify-content:center;align-items:flex-start;padding:16px;box-sizing:border-box}
+iframe{border:0;background:#F4F2EC;box-shadow:0 20px 80px rgba(0,0,0,.4)}</style></head>
+<body><script>
+const q=new URLSearchParams(location.search);const w=+(q.get('w')||393),h=+(q.get('h')||852),p=q.get('path')||'/';
+const f=document.createElement('iframe');f.width=w;f.height=h;f.src=p;f.style.borderRadius=w<600?'34px':'12px';
+document.body.appendChild(f);
+const fit=Math.min(1,(innerWidth-32)/w,(innerHeight-32)/h);document.body.style.zoom=fit;
+</script></body></html>

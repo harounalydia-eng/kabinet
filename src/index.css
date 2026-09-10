@@ -1,0 +1,221 @@
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────
+   KABINET semantic theme tokens.
+   Light values are read from Figma "KABINET — UI/UX Design System v2"
+   (D0HBmkfZzQpvZG3XdY6DQN, page 02). Dark is a companion set that keeps
+   the same hierarchy — warm charcoal, warm off-white, oxblood — not an
+   inversion. `<html data-theme="light|dark">` is always resolved (system
+   is computed in JS) so CSS never needs a media query for colour.
+   ───────────────────────────────────────────────────────────── */
+:root {
+  color-scheme: light;
+  --mobile-page-gutter: 20px;     /* phone content gutter: header, headings, sections and the masonry outer edge share it */
+  --background: #F4F2EC;          /* canvas */
+  --foreground: #111111;          /* text/primary */
+  --surface: #FCFBF8;             /* toolbar, chips, cards */
+  --surface-elevated: #FCFBF8;    /* sheets, panels */
+  --muted: #EBE5DB;               /* fields on a surface, image loading */
+  --muted-foreground: #66635E;    /* eyebrows, body-secondary */
+  --nav-muted: #5C5954;           /* inactive nav label */
+  --border: #E6E2DA;
+  --ring: rgba(17, 17, 17, 0.15);
+  --primary: #111111;             /* ink button / selected chip */
+  --primary-foreground: #FCFBF8;
+  --accent: #4A0E13;              /* oxblood fill — primary nav action, tags */
+  --accent-foreground: #FCFBF8;
+  --accent-text: #4A0E13;         /* oxblood as text — destructive, errors */
+  --overlay: rgba(17, 17, 17, 0.35);
+  --selection: #D6C9B8;
+  --shadow-toolbar: 0 12px 40px rgba(17, 17, 17, 0.10);
+  --nav-ring: transparent;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #161513;          /* deep warm charcoal, never pure black */
+  --foreground: #F2EEE6;          /* warm off-white */
+  --surface: #1F1E1B;
+  --surface-elevated: #262522;
+  --muted: #2B2A26;
+  --muted-foreground: #A39D93;    /* warm grey, ~6:1 on background */
+  --nav-muted: #9C968C;
+  --border: #2F2D29;
+  --ring: rgba(242, 238, 230, 0.28);
+  --primary: #F2EEE6;
+  --primary-foreground: #161513;
+  --accent: #5A1219;              /* oxblood lifted one step so it reads on charcoal */
+  --accent-foreground: #F6EFE9;
+  --accent-text: #C1767C;         /* wine as text, ~5:1 on background */
+  --overlay: rgba(0, 0, 0, 0.55);
+  --selection: #4A3F35;
+  --shadow-toolbar: 0 12px 40px rgba(0, 0, 0, 0.45);
+  --nav-ring: #2F2D29;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-elevated: var(--surface-elevated);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-nav-muted: var(--nav-muted);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-text: var(--accent-text);
+  --color-overlay: var(--overlay);
+  --shadow-toolbar: var(--shadow-toolbar);
+}
+
+@theme {
+  /* Fixed — these sit ON imagery, so they never change with theme */
+  --color-on-image: #FCFBF8;
+  --color-on-image-ink: #111111;
+  --color-scrim: #111111;
+
+  /* Type — Inter (Helvetica is not licensed on this machine; swap here) */
+  --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+
+  /* Spacing scale */
+  --spacing-2xs: 4px;
+  --spacing-xs: 8px;
+  --spacing-sm: 12px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+  --spacing-2xl: 48px;
+  --spacing-3xl: 64px;
+
+  /* Radius — v2 is soft: 17 small tile · 22 tile · 24 card · 28 hero · pill */
+  --radius-content: 2px;   /* content is sharp: imagery, covers, product shots */
+  --radius-tile-sm: 17px;
+  --radius-tile: 22px;
+  --radius-card: 24px;
+  --radius-hero: 28px;
+  --radius-full: 999px;
+
+  /* Motion tokens — one easing, four durations, no springs */
+  --ease-soft: cubic-bezier(0.2, 0, 0, 1);
+  --motion-fast: 150ms;
+  --motion-standard: 250ms;
+  --motion-page: 450ms;
+  --motion-splash: 600ms;
+
+  --width-screen: 393px;
+}
+
+/* Type styles read from the file */
+/* Hierarchy — page 28 · section 20 · card 16 · body 16 · meta 14 · nav 14 · eyebrow 10. Weight and position carry it, not size. */
+@utility type-title { font-size: 28px; line-height: 1.15; letter-spacing: -0.01em; font-weight: 600; }
+@utility type-h2 { font-size: 20px; line-height: 1.2; letter-spacing: -0.005em; font-weight: 600; }
+@utility type-h3 { font-size: 16px; line-height: 1.35; letter-spacing: 0; font-weight: 600; }
+@utility type-body { font-size: 16px; line-height: 1.35; font-weight: 400; }
+@utility type-body-sm { font-size: 14px; line-height: 1.35; font-weight: 400; }
+@utility type-meta { font-size: 14px; line-height: 1.35; font-weight: 400; }
+@utility type-eyebrow { font-size: 10px; line-height: 1.25; letter-spacing: 0.1em; font-weight: 600; text-transform: uppercase; }
+@utility type-micro { font-size: 10px; line-height: 1.25; letter-spacing: 0.06em; font-weight: 500; text-transform: uppercase; }
+@utility type-nav { font-size: 14px; line-height: 1.2; font-weight: 500; }
+@utility type-nav-primary { font-size: 16px; line-height: 1.2; font-weight: 600; }
+@utility type-tile { font-size: 16px; line-height: 1.2; letter-spacing: 0; font-weight: 600; }
+/* Semantic aliases */
+@utility text-page-title { font-size: 28px; line-height: 1.15; letter-spacing: -0.01em; font-weight: 600; }
+@utility text-section-title { font-size: 20px; line-height: 1.2; letter-spacing: -0.005em; font-weight: 600; }
+@utility text-card-title { font-size: 16px; line-height: 1.35; letter-spacing: 0; font-weight: 600; }
+@utility text-body { font-size: 16px; line-height: 1.35; font-weight: 400; }
+@utility text-meta { font-size: 14px; line-height: 1.35; font-weight: 400; }
+@utility text-eyebrow { font-size: 10px; line-height: 1.25; letter-spacing: 0.1em; font-weight: 600; text-transform: uppercase; }
+@utility text-nav { font-size: 14px; line-height: 1.2; font-weight: 500; }
+@utility type-wordmark { font-size: 12px; line-height: 1.2; letter-spacing: 0; font-weight: 600; text-transform: uppercase; }
+
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@utility page-enter { animation: page-in var(--motion-standard) var(--ease-soft) both; }
+
+/* ── Splash: background, then the wordmark fades in and breathes once ── */
+@keyframes splash-logo-in { from { opacity: 0; transform: scale(0.98); } to { opacity: 0.85; transform: scale(0.98); } }
+@keyframes splash-breathe { from { opacity: 0.85; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
+@keyframes splash-logo-out { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(1.01); } }
+@keyframes splash-bg-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes unfold-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes toolbar-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes tile-in { from { opacity: 0; transform: scale(0.985); } to { opacity: 1; transform: scale(1); } }
+@keyframes tile-settle { 0% { opacity: 0; transform: scale(0.94); } 60% { opacity: 1; } 100% { opacity: 1; transform: scale(1); } }
+@keyframes skeleton { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+@keyframes indeterminate { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+@layer components {
+  .splash { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: var(--background); }
+  .splash-logo {
+    animation:
+      splash-logo-in 300ms var(--ease-soft) both,
+      splash-breathe 500ms var(--ease-soft) 300ms both;
+  }
+  .splash[data-leaving] { animation: splash-bg-out 500ms var(--ease-soft) 120ms both; pointer-events: none; }
+  .splash[data-leaving] .splash-logo { animation: splash-logo-out 400ms var(--ease-soft) both; }
+  /* The app unfolds underneath: content first, navigation last */
+  [data-phase="leaving"] .app-content { animation: unfold-in var(--motion-page) var(--ease-soft) 160ms both; }
+  [data-phase="leaving"] .app-nav { animation: toolbar-in 400ms var(--ease-soft) 420ms both; }
+  [data-phase="showing"] .app-nav { opacity: 0; }
+  .tile-in { animation: tile-in var(--motion-page) var(--ease-soft) both; }
+  .tile-settle { animation: tile-settle 520ms var(--ease-soft) both; }
+  .img-skeleton { animation: skeleton 1.6s ease-in-out infinite; }
+  .indeterminate { animation: indeterminate 1.2s var(--ease-soft) infinite; }
+  /* Shared-element continuity (View Transitions API, progressive) */
+  ::view-transition-old(root), ::view-transition-new(root) { animation-duration: var(--motion-standard); animation-timing-function: var(--ease-soft); }
+  ::view-transition-group(*) { animation-duration: var(--motion-page); animation-timing-function: var(--ease-soft); }
+  @media (prefers-reduced-motion: reduce) {
+    ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+  }
+}
+
+/* Sheet motion — keyframes so it runs even where rAF is throttled */
+@keyframes sheet-up { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes sheet-down { from { transform: translateY(0); } to { transform: translateY(100%); } }
+@keyframes panel-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes panel-out { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(8px); } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
+@layer components {
+  .sheet-backdrop { animation: fade-in 200ms var(--ease-soft) both; }
+  .sheet-panel { animation: sheet-up 240ms var(--ease-soft) both; }
+  [data-closing] .sheet-backdrop { animation: fade-out 200ms var(--ease-soft) both; }
+  [data-closing] .sheet-panel { animation: sheet-down 220ms var(--ease-soft) both; }
+  @media (min-width: 64rem) {
+    .sheet-panel { animation-name: panel-in; }
+    [data-closing] .sheet-panel { animation-name: panel-out; }
+  }
+}
+
+/* Floating toolbar: shadow in light, shadow + hairline ring in dark */
+@utility toolbar-lift { box-shadow: var(--shadow-toolbar), 0 0 0 1px var(--nav-ring); }
+
+@layer base {
+  html, body, #root { min-height: 100%; }
+  html { background: var(--background); }
+  body {
+    margin: 0;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior-y: none;
+    transition: background-color 200ms var(--ease-soft), color 200ms var(--ease-soft);
+  }
+  button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: inherit; }
+  input, textarea { font: inherit; color: inherit; }
+  img { display: block; max-width: 100%; }
+  a { color: inherit; text-decoration: none; }
+  ::selection { background: var(--selection); }
+  .no-scrollbar { scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  }
+}
