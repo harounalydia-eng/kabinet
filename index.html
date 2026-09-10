@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
     <meta name="theme-color" content="#F4F2EC" />
     <!-- Browser tab: the K alone on a transparent canvas, swapped with the resolved theme (src/lib/theme.tsx). -->
-    <link id="favicon" rel="icon" type="image/svg+xml" href="/brand/favicon-light.svg?v=2" />
+    <link id="favicon" rel="icon" type="image/svg+xml" href="/brand/favicon-light.svg?v=3" />
     <script>
       // Resolve the theme before first paint (mirrors src/lib/theme.tsx).
       (function () {
@@ -18,7 +18,7 @@
         h.setAttribute('data-theme-preference', p);
         h.style.colorScheme = t;
         var f = document.getElementById('favicon');
-        var want = t === 'dark' ? '/brand/favicon-dark.svg?v=2' : '/brand/favicon-light.svg?v=2';
+        var want = t === 'dark' ? '/brand/favicon-dark.svg?v=3' : '/brand/favicon-light.svg?v=3';
         if (f && f.getAttribute('href') !== want) { var n = f.cloneNode(); n.setAttribute('href', want); f.replaceWith(n); }
         var m = document.querySelector('meta[name="theme-color"]');
         if (m) m.setAttribute('content', t === 'dark' ? '#161513' : '#F4F2EC');

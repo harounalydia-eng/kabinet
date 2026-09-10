@@ -6,7 +6,7 @@ export type ResolvedTheme = 'light' | 'dark'
 export const THEME_KEY = 'kabinet-inspo:theme'
 const THEME_COLOR: Record<ResolvedTheme, string> = { light: '#F4F2EC', dark: '#161513' }
 /** Browser-tab icon per resolved theme: near-black K on a light UI, ivory K on a dark UI. Transparent canvas, no square. */
-const FAVICON: Record<ResolvedTheme, string> = { light: '/brand/favicon-light.svg?v=2', dark: '/brand/favicon-dark.svg?v=2' }
+const FAVICON: Record<ResolvedTheme, string> = { light: '/brand/favicon-light.svg?v=3', dark: '/brand/favicon-dark.svg?v=3' }
 const MQ = '(prefers-color-scheme: dark)'
 
 function readPreference(): ThemePreference {
