@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, HashRouter } from 'react-router'
+import { SpeedInsights } from '@vercel/speed-insights/react'
 
 // Hosted as a single file (Artifact / file://) the app has no server rewrites, so it routes by hash.
 const Router = import.meta.env.VITE_ROUTER === 'hash' ? HashRouter : BrowserRouter
@@ -24,5 +25,6 @@ createRoot(document.getElementById('root')!).render(
       </StoreProvider>
       </ThemeProvider>
     </Router>
+    <SpeedInsights />
   </StrictMode>,
 )
