@@ -14,6 +14,10 @@ const info = {
   viteKeys: Object.keys(env).filter((k) => k.startsWith('VITE_')).sort(),
   supabaseLikeKeys: Object.keys(env).filter((k) => /supabase/i.test(k)).map((k) => JSON.stringify(k)),
   hasSupabaseUrl: url.length > 0,
+  supabaseUrlRawLength: (env.VITE_SUPABASE_URL ?? '').length,
+  supabaseUrlDefined: env.VITE_SUPABASE_URL !== undefined,
+  supabaseUrlStartsWithHttps: url.startsWith('https://'),
+  anonKeyRawLength: (env.VITE_SUPABASE_ANON_KEY ?? '').length,
   supabaseUrlLooksValid: /^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(url),
 }
 mkdirSync('dist', { recursive: true })
