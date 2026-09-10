@@ -9,7 +9,7 @@
   "scripts": {
     "sync:edge": "node scripts/sync-edge.mjs",
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/build-info.mjs",
     "lint": "oxlint",
     "preview": "vite preview"
   },
