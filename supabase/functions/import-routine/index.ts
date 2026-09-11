@@ -247,6 +247,9 @@ const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCa
 const toks = (s: string | null | undefined) => norm(s ?? '').split(' ').filter((t) => t.length > 1 && !STOP.has(t))
 const GENERIC = new Set(['sunscreen', 'spf', 'cleanser', 'toner', 'serum', 'moisturizer', 'moisturiser', 'cream', 'oil', 'mask', 'shampoo', 'conditioner', 'gel', 'mousse', 'foundation', 'concealer', 'blush', 'mascara', 'lipstick', 'balm', 'essence', 'mist', 'primer', 'powder', 'exfoliant', 'retinol', 'eye cream'])
 
+/** Words that describe almost any product; sharing one of them is not evidence of the same product. */
+const WEAK = new Set(['gentle', 'hydrating', 'daily', 'moisturizing', 'moisturising', 'cream', 'lotion', 'wash', 'facial', 'face', 'skin', 'care', 'body', 'hair', 'new', 'original', ...GENERIC])
+
 function score(brand: string | null, name: string, c: Catalog): number {
   const b = toks(brand)
   const n = new Set(toks(name))
@@ -255,8 +258,11 @@ function score(brand: string | null, name: string, c: Catalog): number {
   const brandInBrand = b.some((t) => cb.includes(t))
   const brandInName = b.some((t) => cn.includes(t))
   if (b.length && !brandInBrand && !brandInName) return 0
-  const overlap = cn.filter((t) => n.has(t)).length
-  if (overlap === 0 && !b.length) return 0
+  const shared = cn.filter((t) => n.has(t))
+  if (shared.length === 0 && !b.length) return 0
+  // A distinctive shared word counts fully; a generic one ("gentle", "cream") only a little — brand + one generic
+  // word is a possible match for the person to confirm, never a silent match.
+  const overlap = shared.reduce((sum, t) => sum + (WEAK.has(t) ? 0.4 : 1), 0)
   return overlap + (brandInBrand ? 1.5 : brandInName ? 0.5 : 0) + (c.image_url ? 0.25 : 0)
 }
 
