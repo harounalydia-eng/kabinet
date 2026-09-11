@@ -52,10 +52,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Public values only: the project URL and publishable key. The VITE_ names are the ones the frontend build already
   // has on this Vercel project, so they double as a fallback. GEMINI_API_KEY has no such fallback — server-side only.
-  const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL
-  const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.VITE_SUPABASE_PUBLISHABLE_KEY
-  const geminiKey = process.env.GEMINI_API_KEY
-  if (!supabaseUrl || !publishableKey) return res.status(503).json({ ok: false, error: 'The extractor is not configured (SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY missing).' })
+  // A variable that exists but is blank counts as missing (this project has had empty values before).
+  const env = (name: string) => (process.env[name] ?? '').trim() || undefined
+  const supabaseUrl = env('SUPABASE_URL') ?? env('VITE_SUPABASE_URL')
+  const publishableKey = env('SUPABASE_PUBLISHABLE_KEY') ?? env('VITE_SUPABASE_PUBLISHABLE_KEY')
+  const geminiKey = env('GEMINI_API_KEY')
+  if (!supabaseUrl || !publishableKey) {
+    // Names only, never values: which relevant variables this deployment actually received, and which are blank.
+    const seen = Object.keys(process.env).filter((n) => /SUPABASE|GEMINI|KABINET/i.test(n)).sort().map((n) => (process.env[n] ?? '').trim() ? n : `${n} (blank)`)
+    return res.status(503).json({ ok: false, error: 'The extractor is not configured (SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY missing or blank).', env_seen: seen })
+  }
 
   const userId = await verifyUser(req.headers.authorization, supabaseUrl, publishableKey)
   if (!userId) return res.status(401).json({ ok: false, error: 'Sign in to KABINET to import a routine.' })
