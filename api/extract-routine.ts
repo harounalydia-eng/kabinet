@@ -54,8 +54,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   // has on this Vercel project, so they double as a fallback. GEMINI_API_KEY has no such fallback — server-side only.
   // A variable that exists but is blank counts as missing (this project has had empty values before).
   const env = (name: string) => (process.env[name] ?? '').trim() || undefined
-  const supabaseUrl = env('SUPABASE_URL') ?? env('VITE_SUPABASE_URL')
-  const publishableKey = env('SUPABASE_PUBLISHABLE_KEY') ?? env('VITE_SUPABASE_PUBLISHABLE_KEY')
+  // Both are PUBLIC values (the same URL and publishable key ship in every browser bundle of the app), so a
+  // hard-coded default is safe; env vars still win when set. There is deliberately no default for GEMINI_API_KEY.
+  const supabaseUrl = env('SUPABASE_URL') ?? env('VITE_SUPABASE_URL') ?? 'https://mdtdcppzrhwmowynzqdp.supabase.co'
+  const publishableKey = env('SUPABASE_PUBLISHABLE_KEY') ?? env('VITE_SUPABASE_PUBLISHABLE_KEY') ?? 'sb_publishable_GxImfbCCMBMXKYHpsvJExA_KxSyj9Gd'
   const geminiKey = env('GEMINI_API_KEY')
   if (!supabaseUrl || !publishableKey) {
     // Names only, never values: which relevant variables this deployment actually received, and which are blank.
