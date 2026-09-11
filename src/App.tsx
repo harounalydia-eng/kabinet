@@ -20,6 +20,9 @@ import Routines from './screens/Routines'
 import RoutineDetail from './screens/RoutineDetail'
 import RoutineEditor from './screens/RoutineEditor'
 import RoutineRun from './screens/RoutineRun'
+import RoutineImport from './screens/routines/RoutineImport'
+import RoutineReview from './screens/routines/RoutineReview'
+import ImportedRoutine from './screens/routines/ImportedRoutine'
 import Welcome from './screens/onboarding/Welcome'
 import Auth from './screens/onboarding/Auth'
 import Worlds from './screens/onboarding/Worlds'
@@ -103,6 +106,9 @@ export default function App() {
             <Route path="/kabinet" element={<MyKabinet />} />
             <Route path="/routines" element={<Routines />} />
             <Route path="/routines/new" element={<RoutineEditor />} />
+            <Route path="/routines/import" element={<RoutineImport />} />
+            <Route path="/routines/review/:id" element={<RoutineReview />} />
+            <Route path="/routines/r/:id" element={<ImportedRoutine />} />
             <Route path="/routines/:id" element={<RoutineDetail />} />
             <Route path="/routines/:id/edit" element={<RoutineEditor />} />
             <Route path="/routines/:id/start" element={<RoutineRun />} />
