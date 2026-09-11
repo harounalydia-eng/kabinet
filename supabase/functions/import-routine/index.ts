@@ -2,19 +2,19 @@
 //
 // Beauty content → structured routine. The beauty equivalent of a recipe importer:
 //   URL → platform → public metadata (title · caption · description · creator · thumbnail) → transcript when one
-//   exists → ONE model call that turns the evidence into {products, steps} without inventing anything →
+//   exists → ONE Gemini call that turns the evidence into {products, steps} without inventing anything →
 //   every product resolved against catalog_products (cache first, then lookup-product) → rows in
 //   content_imports / routines / routine_products / routine_steps.
 //
 // POST /import-routine            { url, transcript? }                     → runs the pipeline (or returns the cached routine)
 // POST /import-routine/rerun      { import_id, transcript? }               → extracts again with new evidence (e.g. a pasted transcript)
 // POST /import-routine/confirm    { routine_product_id, catalog_product_id | null } → the person picks the right product
+// POST /import-routine/diagnose   {}                                       → is GEMINI_API_KEY readable, does the model answer (never returns the key)
 //
 // Identity: the user's session JWT. Writes use the service role. Status is written to content_imports as the
 // pipeline moves (reading → listening → extracting → matching → ready | failed) so the app can show honest copy.
 // Third-party video is never downloaded or re-hosted: source URL, thumbnail URL, metadata, extraction only.
-import Anthropic from 'npm:@anthropic-ai/sdk'
-import { createClient, type SupabaseClient } from 'npm:@supabase/supabase-js@2'
+import { createClient } from 'npm:@supabase/supabase-js@2'
 import { detectPlatform, type DetectedLink } from './platform.ts'
 
 const cors = {
@@ -28,9 +28,10 @@ const fail = (status: number, message: string, extra: Record<string, unknown> = 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
-const ANTHROPIC_KEY = Deno.env.get('ANTHROPIC_API_KEY')
+const GEMINI_KEY = Deno.env.get('GEMINI_API_KEY')
 const YOUTUBE_KEY = Deno.env.get('YOUTUBE_API_KEY')
-const MODEL = Deno.env.get('KABINET_EXTRACTION_MODEL') ?? 'claude-sonnet-5'
+const MODEL = Deno.env.get('KABINET_EXTRACTION_MODEL') ?? 'gemini-3.6-flash'
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
 const UA = 'KABINET/0.1 (+https://github.com/harounalydia-eng/kabinet)'
 const db = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } })
 
@@ -134,30 +135,30 @@ async function metadata(link: DetectedLink): Promise<Meta> {
   return m
 }
 
-// ── Extraction (one model call) ────────────────────────────────────────────────
+// ── Extraction (one Gemini call) ───────────────────────────────────────────────
 
+/** Standard JSON Schema — Gemini accepts it as `responseJsonSchema`; `toGeminiSchema` converts it for the older `responseSchema` field. */
 const CONF = { type: 'string', enum: ['high', 'medium', 'low'] } as const
 const SCHEMA = {
   type: 'object',
-  additionalProperties: false,
   required: ['title', 'routine_type', 'description', 'skin_hair_context', 'confidence', 'notes', 'products', 'steps'],
   properties: {
-    title: { type: 'string', maxLength: 90, description: 'What this routine is, in the creator\'s framing. Not marketing copy.' },
+    title: { type: 'string', description: "What this routine is, in the creator's framing. Not marketing copy." },
     routine_type: { type: 'string', enum: ['skincare', 'makeup', 'haircare', 'scalp', 'body', 'nails', 'mixed', 'unknown'] },
-    description: { type: ['string', 'null'], maxLength: 300 },
-    skin_hair_context: { type: ['string', 'null'], maxLength: 200, description: 'What the creator says about their own skin/hair, close to verbatim. Null if not stated.' },
+    description: { type: ['string', 'null'] },
+    skin_hair_context: { type: ['string', 'null'], description: 'What the creator says about their own skin/hair, close to verbatim. Null if not stated.' },
     confidence: CONF,
-    notes: { type: ['string', 'null'], maxLength: 300, description: 'What evidence was thin or missing.' },
+    notes: { type: ['string', 'null'], description: 'What evidence was thin or missing.' },
     products: {
-      type: 'array', maxItems: 25,
+      type: 'array',
       items: {
-        type: 'object', additionalProperties: false,
+        type: 'object',
         required: ['raw_brand', 'raw_product_name', 'raw_variant', 'raw_text', 'usage_order', 'usage_notes', 'amount_text', 'evidence', 'confidence'],
         properties: {
-          raw_brand: { type: ['string', 'null'] },
-          raw_product_name: { type: 'string', description: 'Exactly as named in the evidence. A generic category ("sunscreen") is allowed when no name is given — never guess a brand for it.' },
+          raw_brand: { type: ['string', 'null'], description: 'Only when the evidence names it.' },
+          raw_product_name: { type: 'string', description: 'Exactly as named in the evidence. A generic category ("sunscreen") is allowed when no name is given — never guess a brand or a specific product for it.' },
           raw_variant: { type: ['string', 'null'], description: 'Shade, size, strength, formula if stated.' },
-          raw_text: { type: 'string', description: 'The exact words in the evidence this product comes from.' },
+          raw_text: { type: 'string', description: 'The exact words in the evidence this product comes from, copied verbatim.' },
           usage_order: { type: 'integer' },
           usage_notes: { type: ['string', 'null'] },
           amount_text: { type: ['string', 'null'] },
@@ -167,38 +168,161 @@ const SCHEMA = {
       },
     },
     steps: {
-      type: 'array', maxItems: 30,
+      type: 'array',
       items: {
-        type: 'object', additionalProperties: false,
+        type: 'object',
         required: ['step_number', 'title', 'instruction', 'product_index', 'timing_text', 'area_text', 'confidence'],
         properties: {
           step_number: { type: 'integer' },
-          title: { type: ['string', 'null'], maxLength: 40, description: 'A short label such as Cleanse, Prep, Protect.' },
-          instruction: { type: 'string', maxLength: 300, description: 'What the creator does, in the creator\'s terms.' },
+          title: { type: ['string', 'null'], description: 'A short label such as Cleanse, Prep, Protect.' },
+          instruction: { type: 'string', description: "What the creator does, in the creator's terms." },
           product_index: { type: ['integer', 'null'], description: 'Index into products (0-based) when this step uses one.' },
-          timing_text: { type: ['string', 'null'] },
-          area_text: { type: ['string', 'null'] },
+          timing_text: { type: ['string', 'null'], description: 'Only if explicitly mentioned.' },
+          area_text: { type: ['string', 'null'], description: 'Only if explicitly mentioned.' },
           confidence: CONF,
         },
       },
     },
   },
-} as const
+}
 
-const SYSTEM = `You turn the text around a beauty video into a structured routine, the way a recipe importer turns a cooking video into ingredients and steps.
+/** JSON Schema → Gemini `Schema` (uppercase types, `nullable` instead of type arrays, no keywords Gemini rejects). */
+function toGeminiSchema(node: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  let type = node.type as string | string[]
+  if (Array.isArray(type)) {
+    if (type.includes('null')) out.nullable = true
+    type = type.find((t) => t !== 'null') ?? 'string'
+  }
+  out.type = String(type).toUpperCase()
+  if (node.description) out.description = node.description
+  if (node.enum) out.enum = node.enum
+  if (node.required) out.required = node.required
+  if (node.properties) {
+    const props: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(node.properties as Record<string, Record<string, unknown>>)) props[k] = toGeminiSchema(v)
+    out.properties = props
+    out.propertyOrdering = Object.keys(props)
+  }
+  if (node.items) out.items = toGeminiSchema(node.items as Record<string, unknown>)
+  return out
+}
+
+const SYSTEM = `You turn the text around a beauty video into a structured routine, the way a recipe importer turns a cooking video into ingredients and steps. You are a careful transcriber of what the creator shared, not an expert filling gaps.
 
 Rules that must never be broken:
-- Use ONLY the evidence given. Never add a brand, product, shade, amount, timing or step that the evidence does not state.
-- A product needs a name in the evidence. If only a category is stated ("a sunscreen", "my toner"), record that category as raw_product_name with raw_brand null and confidence low.
-- raw_text must be an exact quote from the evidence.
+- Use ONLY the evidence given. Never add a brand, product, shade, amount, timing or step that the evidence does not state. Your general knowledge of beauty products must not add anything.
+- A product needs a name in the evidence. If only a category is stated ("a sunscreen", "my toner", "this one is from CeraVe"), record what IS stated (category and, if named, the brand) as raw_product_name / raw_brand with confidence low — do not guess which specific product it is.
+- raw_text must be an exact quote copied from the evidence.
 - Steps only when the evidence states actions; keep the creator's order. If products are merely listed with no actions, return steps as an empty array.
+- timing_text and area_text only when explicitly mentioned.
 - Say nothing about whether anything is good for anyone. No claims, no advice.
-- If the evidence is not about a beauty routine at all, return routine_type "unknown", empty products and steps, and explain in notes.`
+- If the evidence is not about a beauty routine at all, return routine_type "unknown", empty products and steps, and explain in notes.
+Return JSON only.`
 
 type Extraction = {
   title: string; routine_type: string; description: string | null; skin_hair_context: string | null; confidence: Confidence; notes: string | null
   products: Array<{ raw_brand: string | null; raw_product_name: string; raw_variant: string | null; raw_text: string; usage_order: number; usage_notes: string | null; amount_text: string | null; evidence: Evidence[]; confidence: Confidence }>
   steps: Array<{ step_number: number; title: string | null; instruction: string; product_index: number | null; timing_text: string | null; area_text: string | null; confidence: Confidence }>
+}
+
+class GeminiError extends Error {
+  readonly status: number
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'GeminiError'
+    this.status = status
+  }
+}
+
+/** One generateContent call with a JSON schema. Tries the standard-JSON-Schema field first, then Gemini's own Schema shape. */
+async function geminiJson(model: string, system: string, user: string, schema: Record<string, unknown>, maxOutputTokens = 6000): Promise<{ data: unknown; usage: Record<string, unknown> | null; schemaField: string }> {
+  if (!GEMINI_KEY) throw new GeminiError(503, 'GEMINI_API_KEY is not configured on the server.')
+  const attempts: Array<[string, Record<string, unknown>]> = [
+    ['responseJsonSchema', { responseJsonSchema: schema }],
+    ['responseSchema', { responseSchema: toGeminiSchema(schema) }],
+  ]
+  let lastErr: GeminiError | null = null
+  for (const [field, cfg] of attempts) {
+    const res = await fetch(`${GEMINI_BASE}/models/${model}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_KEY },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: system }] },
+        contents: [{ role: 'user', parts: [{ text: user }] }],
+        generationConfig: { temperature: 0, responseMimeType: 'application/json', maxOutputTokens, ...cfg },
+      }),
+      signal: AbortSignal.timeout(60_000),
+    })
+    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>
+    if (!res.ok) {
+      const msg = ((body.error as { message?: string } | undefined)?.message ?? `HTTP ${res.status}`).slice(0, 300)
+      lastErr = new GeminiError(res.status, msg)
+      // Only a schema-shape rejection is worth retrying with the other field.
+      if (res.status === 400 && /schema|responseJsonSchema|response_json_schema/i.test(msg)) continue
+      throw lastErr
+    }
+    const cands = (body.candidates as Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }> | undefined) ?? []
+    const text = cands[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? ''
+    if (!text) throw new GeminiError(502, `Gemini returned no content (${cands[0]?.finishReason ?? 'no candidate'}).`)
+    try {
+      return { data: JSON.parse(text), usage: (body.usageMetadata as Record<string, unknown>) ?? null, schemaField: field }
+    } catch {
+      throw new GeminiError(502, 'Gemini returned something that is not JSON.')
+    }
+  }
+  throw lastErr ?? new GeminiError(502, 'Gemini did not answer.')
+}
+
+const str0 = (v: unknown, max = 400): string | null => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null)
+const conf = (v: unknown): Confidence => (v === 'high' || v === 'medium' ? v : 'low')
+const squash = (s: string) => s.toLowerCase().replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/\s+/g, ' ').trim()
+
+/**
+ * Nothing the model says is trusted as-is. Shapes are enforced, and every product's raw_text must actually occur
+ * in the evidence — a quote that is not there means the product was not there either, so it is dropped.
+ */
+function validateExtraction(v: unknown, evidenceText: string): { x: Extraction; dropped: string[] } {
+  const o = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>
+  const hay = squash(evidenceText)
+  const TYPES = new Set(['skincare', 'makeup', 'haircare', 'scalp', 'body', 'nails', 'mixed', 'unknown'])
+  const EV = new Set(['title', 'caption', 'description', 'hashtags', 'transcript'])
+  const dropped: string[] = []
+  const rawProducts = Array.isArray(o.products) ? (o.products as Array<Record<string, unknown>>) : []
+  const keep: number[] = []
+  const products: Extraction['products'] = []
+  rawProducts.forEach((p, i) => {
+    const name = str0(p.raw_product_name, 120)
+    const quote = str0(p.raw_text, 600)
+    if (!name || !quote) return
+    if (!hay.includes(squash(quote))) {
+      dropped.push(name)
+      return
+    }
+    keep.push(i)
+    products.push({
+      raw_brand: str0(p.raw_brand, 80), raw_product_name: name, raw_variant: str0(p.raw_variant, 120), raw_text: quote,
+      usage_order: Number.isInteger(p.usage_order) ? (p.usage_order as number) : products.length + 1,
+      usage_notes: str0(p.usage_notes, 300), amount_text: str0(p.amount_text, 80),
+      evidence: (Array.isArray(p.evidence) ? p.evidence : []).filter((e): e is Evidence => typeof e === 'string' && EV.has(e)),
+      confidence: conf(p.confidence),
+    })
+  })
+  const remap = new Map(keep.map((oldIdx, newIdx) => [oldIdx, newIdx]))
+  const steps: Extraction['steps'] = (Array.isArray(o.steps) ? (o.steps as Array<Record<string, unknown>>) : [])
+    .map((s, i) => ({
+      step_number: i + 1, title: str0(s.title, 40), instruction: str0(s.instruction, 300) ?? '',
+      product_index: Number.isInteger(s.product_index) && remap.has(s.product_index as number) ? (remap.get(s.product_index as number) as number) : null,
+      timing_text: str0(s.timing_text, 80), area_text: str0(s.area_text, 80), confidence: conf(s.confidence),
+    }))
+    .filter((s) => s.instruction)
+  const x: Extraction = {
+    title: str0(o.title, 90) ?? '', routine_type: TYPES.has(String(o.routine_type)) ? String(o.routine_type) : 'unknown',
+    description: str0(o.description, 300), skin_hair_context: str0(o.skin_hair_context, 200), confidence: conf(o.confidence),
+    notes: [str0(o.notes, 300), dropped.length ? `Dropped ${dropped.length} product mention${dropped.length === 1 ? '' : 's'} whose quoted evidence was not in the source: ${dropped.join(', ')}.` : null].filter(Boolean).join(' ') || null,
+    products, steps,
+  }
+  return { x, dropped }
 }
 
 async function extract(platform: string, m: Meta, transcript: string | null, hashtags: string[]): Promise<Extraction> {
@@ -207,20 +331,12 @@ async function extract(platform: string, m: Meta, transcript: string | null, has
     m.caption && m.caption !== m.title && `CAPTION:\n${m.caption}`,
     m.description && `DESCRIPTION:\n${m.description.slice(0, 6000)}`,
     hashtags.length && `HASHTAGS:\n${hashtags.map((h) => `#${h}`).join(' ')}`,
-    transcript && `TRANSCRIPT (what is said in the video):\n${transcript.slice(0, 12_000)}`,
-  ].filter(Boolean)
-  const client = new Anthropic({ apiKey: ANTHROPIC_KEY! })
-  const msg = await client.messages.create({
-    model: MODEL,
-    max_tokens: 3000,
-    system: SYSTEM,
-    messages: [{ role: 'user', content: `Platform: ${platform}\nCreator: ${m.creatorHandle ?? m.creatorName ?? 'unknown'}\n\nEVIDENCE\n\n${parts.join('\n\n')}` }],
-    tools: [{ name: 'routine_extraction', description: 'The routine, products and steps found in the evidence', input_schema: SCHEMA as unknown as Record<string, unknown> }],
-    tool_choice: { type: 'tool', name: 'routine_extraction' },
-  })
-  const tool = msg.content.find((c) => c.type === 'tool_use')
-  if (!tool || tool.type !== 'tool_use') throw new Error('The model returned no extraction.')
-  return tool.input as Extraction
+    transcript && `TRANSCRIPT (what is said or written in the video, supplied by the person importing it):\n${transcript.slice(0, 12_000)}`,
+  ].filter(Boolean) as string[]
+  const user = `Platform: ${platform}\nCreator: ${m.creatorHandle ?? m.creatorName ?? 'unknown'}\n\nEVIDENCE\n\n${parts.join('\n\n')}`
+  const { data } = await geminiJson(MODEL, SYSTEM, user, SCHEMA)
+  const { x } = validateExtraction(data, parts.join('\n'))
+  return x
 }
 
 // ── Product resolution (catalog first, then lookup-product) ───────────────────
@@ -346,7 +462,7 @@ async function runPipeline(importId: string, link: DetectedLink, userTranscript:
   if (!evidence.length) throw new Error(m.note ?? 'Nothing readable came back for this link. Paste the caption or what is said and try again.')
 
   // 3 · build the routine — one model call over the evidence
-  if (!ANTHROPIC_KEY) throw new Error('KABINET\'s extraction is not configured yet (ANTHROPIC_API_KEY missing). The post was read and kept; run it again once the key is set.')
+  if (!GEMINI_KEY) throw new Error('KABINET\'s extraction is not configured yet (GEMINI_API_KEY missing). The post was read and kept; run it again once the key is set.')
   await setStatus(importId, 'extracting')
   const x = await extract(link.platform, m, transcript, hashtags)
 
@@ -400,6 +516,34 @@ Deno.serve(async (req: Request) => {
   const str = (v: unknown, max = 20_000) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null)
 
   try {
+    if (route === '/diagnose') {
+      // Proves the secret is readable and the model answers. The key itself is never returned or logged.
+      // Names of secrets only (never values) so a mis-named key is diagnosable; `model` in the body tests a candidate without redeploying.
+      const envNames = Object.keys(Deno.env.toObject()).filter((n) => !/^(SUPABASE_|DENO_|SB_|HOME$|PATH$|HOSTNAME$|LANG|LC_|TERM|PWD$|USER$|SHELL$|TMPDIR$)/.test(n)).sort()
+      const model = str(body.model, 80) ?? MODEL
+      const out: Record<string, unknown> = { ok: false, key_present: !!GEMINI_KEY, model, default_model: MODEL, env_names: envNames }
+      if (!GEMINI_KEY) return json({ ...out, message: 'GEMINI_API_KEY is not set in the function secrets.' }, 503)
+      try {
+        const list = await fetch(`${GEMINI_BASE}/models?pageSize=200`, { headers: { 'x-goog-api-key': GEMINI_KEY }, signal: AbortSignal.timeout(15_000) })
+        const lb = (await list.json().catch(() => ({}))) as { models?: Array<{ name: string; supportedGenerationMethods?: string[] }>; error?: { message?: string } }
+        out.models_endpoint = list.status
+        if (!list.ok) return json({ ...out, message: `Model listing failed: ${(lb.error?.message ?? `HTTP ${list.status}`).slice(0, 200)}` }, 502)
+        const names = (lb.models ?? []).filter((mm) => (mm.supportedGenerationMethods ?? []).includes('generateContent')).map((mm) => mm.name.replace(/^models\//, ''))
+        out.model_listed = names.includes(model)
+        out.flash_models = names.filter((n) => /flash/.test(n)).slice(0, 40)
+        const t0 = Date.now()
+        const r = await geminiJson(model, 'Answer with JSON only.', 'Return {"ok": true, "word": "kabinet"}', { type: 'object', required: ['ok', 'word'], properties: { ok: { type: 'boolean' }, word: { type: 'string' } } }, 64)
+        out.test_ms = Date.now() - t0
+        out.test_reply = r.data
+        out.schema_field = r.schemaField
+        out.usage = r.usage
+        return json({ ...out, ok: true, message: 'Gemini answered.' })
+      } catch (e) {
+        const status = e instanceof GeminiError ? e.status : 502
+        return json({ ...out, message: (e as Error).message }, status)
+      }
+    }
+
     if (route === '/confirm') {
       const rpId = str(body.routine_product_id)
       const cpId = body.catalog_product_id === null ? null : str(body.catalog_product_id)

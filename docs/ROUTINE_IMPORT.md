@@ -30,11 +30,14 @@ Raw extraction is never overwritten by catalog data: `raw_*` stays as said/shown
 - `POST /import-routine/confirm {routine_product_id, catalog_product_id | null}` — the person picks the right product (`manual`).
 - Identity: session JWT. Status copy is written to `content_imports.status_message` as it moves
   (Reading the post… → Listening for products… → Building the routine… → Matching products…). The app polls that row.
-- Model: `claude-sonnet-5` (env `KABINET_EXTRACTION_MODEL`), **one call per import**, tool-schema output, system prompt
-  forbids invention; generic mentions ("a sunscreen") become `resolution_status = none`.
+- Model: **Google Gemini** `gemini-3.6-flash` (env `KABINET_EXTRACTION_MODEL`; REST `models/{model}:generateContent`,
+  `x-goog-api-key`, JSON via `responseJsonSchema` with a `responseSchema` fallback), **one call per import**. The system
+  prompt forbids invention and the server drops any product whose quoted `raw_text` is not literally in the evidence.
+  Generic mentions ("a sunscreen") become `resolution_status = none`. Ingredients never come from the model.
+- `POST /import-routine/diagnose {model?}` — key readable? model listed? minimal JSON call — never returns the key.
 - Resolution: `matched` (brand agrees + name words overlap, clear winner) · `possible_match` (candidates stored, person
   chooses) · `unresolved` (named but unknown to catalog + Open Beauty Facts) · `none` (category only).
-- Secrets: `ANTHROPIC_API_KEY` (required for extraction), `YOUTUBE_API_KEY` (needed for the YouTube description:
+- Secrets: `GEMINI_API_KEY` (required for extraction; set under Edge Functions → Secrets on project `mdtdcppzrhwmowynzqdp`), `YOUTUBE_API_KEY` (needed for the YouTube description:
   the watch-page fallback returns no player JSON from the Supabase edge runtime even with the EU consent cookie —
   verified 2026-09-11 — so without the key YouTube evidence is the title only).
 
