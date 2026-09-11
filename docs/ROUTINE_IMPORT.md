@@ -34,14 +34,15 @@ Raw extraction is never overwritten by catalog data: `raw_*` stays as said/shown
   forbids invention; generic mentions ("a sunscreen") become `resolution_status = none`.
 - Resolution: `matched` (brand agrees + name words overlap, clear winner) · `possible_match` (candidates stored, person
   chooses) · `unresolved` (named but unknown to catalog + Open Beauty Facts) · `none` (category only).
-- Secrets: `ANTHROPIC_API_KEY` (required for extraction), `YOUTUBE_API_KEY` (optional — official description; without
-  it the watch page's own JSON is read, which is unofficial and may stop working).
+- Secrets: `ANTHROPIC_API_KEY` (required for extraction), `YOUTUBE_API_KEY` (needed for the YouTube description:
+  the watch-page fallback returns no player JSON from the Supabase edge runtime even with the EU consent cookie —
+  verified 2026-09-11 — so without the key YouTube evidence is the title only).
 
 ## What each platform gives an app (verified 2026-09-11)
 
 | | TikTok | YouTube | Instagram |
 |---|---|---|---|
-| metadata | oEmbed (public): caption-as-title, author name/url, thumbnail, embed | oEmbed (public): title, channel name/url, thumbnail; **description** via Data API key (official) or watch-page JSON (unofficial) | nothing without an approved Meta app + oEmbed token |
+| metadata | oEmbed (public): caption-as-title, author name/url, thumbnail, embed | oEmbed (public): title, channel name/url, thumbnail; **description only via Data API key** (the watch-page JSON is not served to the edge runtime) | nothing without an approved Meta app + oEmbed token |
 | caption | yes (oEmbed `title`) | title + description | no |
 | transcript | no | no — `timedtext` returns empty bodies to non-browser clients since 2024/25; Data API `captions.download` needs the owner's OAuth | no |
 | video file | no (ToS; only embed) | no (ToS; only embed) | no |
