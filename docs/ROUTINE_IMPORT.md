@@ -67,6 +67,14 @@ KABINET is not allowed to fetch; it stays an interface for a future user-upload 
   Routine 01…, actions Save routine · Add products to My Kabinet · Check with KABINET (env) · Adapt routine for me (soon).
 - `/routines` — "From creators" section + "+ From a link".
 
+## Verified end-to-end (2026-09-11)
+
+YouTube Short by @Doctorly with its description pasted as evidence → `gemini-3.6-flash` via `kabinet-beauty.vercel.app` →
+6 products (3 possible_match with candidates, 3 unresolved — none silently matched), 7 ordered steps with NIGHT/DAY timing,
+every accepted `raw_text` verbatim in the evidence, review reads under RLS, saved to `user_routines`, cached on repeat.
+Resolver rule: a shared generic word ("gentle", "cream") weighs 0.4, so brand + generic word is a possible match for the
+person to confirm, never a silent match.
+
 ## Not in this phase
 
 Transcription provider, frame sampling, compatibility/adaptation intelligence, analytics. The model allows all of them
