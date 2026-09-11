@@ -2,16 +2,17 @@
 //
 // Beauty content → structured routine. The beauty equivalent of a recipe importer:
 //   URL → platform → public metadata (title · caption · description · creator · thumbnail) → transcript when one
-//   exists → ONE Gemini call that turns the evidence into {products, steps} without inventing anything →
+//   exists → ONE Gemini call (made by KABINET's own server at kabinet-beauty.vercel.app, which holds the key) →
 //   every product resolved against catalog_products (cache first, then lookup-product) → rows in
 //   content_imports / routines / routine_products / routine_steps.
 //
 // POST /import-routine            { url, transcript? }                     → runs the pipeline (or returns the cached routine)
 // POST /import-routine/rerun      { import_id, transcript? }               → extracts again with new evidence (e.g. a pasted transcript)
 // POST /import-routine/confirm    { routine_product_id, catalog_product_id | null } → the person picks the right product
-// POST /import-routine/diagnose   {}                                       → is GEMINI_API_KEY readable, does the model answer (never returns the key)
+// POST /import-routine/diagnose   {}                                       → is the extraction server reachable and configured (never returns a key)
 //
-// Identity: the user's session JWT. Writes use the service role. Status is written to content_imports as the
+// Identity: the user's session JWT — also forwarded to the extraction server so it can verify the same person.
+// Writes use the service role. Status is written to content_imports as the
 // pipeline moves (reading → listening → extracting → matching → ready | failed) so the app can show honest copy.
 // Third-party video is never downloaded or re-hosted: source URL, thumbnail URL, metadata, extraction only.
 import { createClient } from 'npm:@supabase/supabase-js@2'
@@ -28,10 +29,9 @@ const fail = (status: number, message: string, extra: Record<string, unknown> = 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
-const GEMINI_KEY = Deno.env.get('GEMINI_API_KEY')
 const YOUTUBE_KEY = Deno.env.get('YOUTUBE_API_KEY')
-const MODEL = Deno.env.get('KABINET_EXTRACTION_MODEL') ?? 'gemini-3.6-flash'
-const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta'
+/** Fixed production extraction host. Never taken from the request. */
+const EXTRACTOR_URL = 'https://kabinet-beauty.vercel.app/api/extract-routine'
 const UA = 'KABINET/0.1 (+https://github.com/harounalydia-eng/kabinet)'
 const db = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } })
 
@@ -40,12 +40,12 @@ type Evidence = 'title' | 'caption' | 'description' | 'hashtags' | 'transcript'
 
 // ── Identity ───────────────────────────────────────────────────────────────────
 
-async function identify(req: Request): Promise<string | Response> {
+async function identify(req: Request): Promise<{ userId: string; token: string } | Response> {
   const bearer = (req.headers.get('authorization') ?? '').replace(/^Bearer\s+/i, '').trim()
   if (!bearer || bearer.split('.').length !== 3) return fail(401, 'Sign in to KABINET to import a routine.')
   const { data, error } = await db.auth.getUser(bearer)
   if (error || !data.user) return fail(401, 'Your session has expired. Sign in again.')
-  return data.user.id
+  return { userId: data.user.id, token: bearer }
 }
 
 // ── Metadata (public, no credentials) ──────────────────────────────────────────
@@ -135,90 +135,7 @@ async function metadata(link: DetectedLink): Promise<Meta> {
   return m
 }
 
-// ── Extraction (one Gemini call) ───────────────────────────────────────────────
-
-/** Standard JSON Schema — Gemini accepts it as `responseJsonSchema`; `toGeminiSchema` converts it for the older `responseSchema` field. */
-const CONF = { type: 'string', enum: ['high', 'medium', 'low'] } as const
-const SCHEMA = {
-  type: 'object',
-  required: ['title', 'routine_type', 'description', 'skin_hair_context', 'confidence', 'notes', 'products', 'steps'],
-  properties: {
-    title: { type: 'string', description: "What this routine is, in the creator's framing. Not marketing copy." },
-    routine_type: { type: 'string', enum: ['skincare', 'makeup', 'haircare', 'scalp', 'body', 'nails', 'mixed', 'unknown'] },
-    description: { type: ['string', 'null'] },
-    skin_hair_context: { type: ['string', 'null'], description: 'What the creator says about their own skin/hair, close to verbatim. Null if not stated.' },
-    confidence: CONF,
-    notes: { type: ['string', 'null'], description: 'What evidence was thin or missing.' },
-    products: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['raw_brand', 'raw_product_name', 'raw_variant', 'raw_text', 'usage_order', 'usage_notes', 'amount_text', 'evidence', 'confidence'],
-        properties: {
-          raw_brand: { type: ['string', 'null'], description: 'Only when the evidence names it.' },
-          raw_product_name: { type: 'string', description: 'Exactly as named in the evidence. A generic category ("sunscreen") is allowed when no name is given — never guess a brand or a specific product for it.' },
-          raw_variant: { type: ['string', 'null'], description: 'Shade, size, strength, formula if stated.' },
-          raw_text: { type: 'string', description: 'The exact words in the evidence this product comes from, copied verbatim.' },
-          usage_order: { type: 'integer' },
-          usage_notes: { type: ['string', 'null'] },
-          amount_text: { type: ['string', 'null'] },
-          evidence: { type: 'array', items: { type: 'string', enum: ['title', 'caption', 'description', 'hashtags', 'transcript'] } },
-          confidence: CONF,
-        },
-      },
-    },
-    steps: {
-      type: 'array',
-      items: {
-        type: 'object',
-        required: ['step_number', 'title', 'instruction', 'product_index', 'timing_text', 'area_text', 'confidence'],
-        properties: {
-          step_number: { type: 'integer' },
-          title: { type: ['string', 'null'], description: 'A short label such as Cleanse, Prep, Protect.' },
-          instruction: { type: 'string', description: "What the creator does, in the creator's terms." },
-          product_index: { type: ['integer', 'null'], description: 'Index into products (0-based) when this step uses one.' },
-          timing_text: { type: ['string', 'null'], description: 'Only if explicitly mentioned.' },
-          area_text: { type: ['string', 'null'], description: 'Only if explicitly mentioned.' },
-          confidence: CONF,
-        },
-      },
-    },
-  },
-}
-
-/** JSON Schema → Gemini `Schema` (uppercase types, `nullable` instead of type arrays, no keywords Gemini rejects). */
-function toGeminiSchema(node: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {}
-  let type = node.type as string | string[]
-  if (Array.isArray(type)) {
-    if (type.includes('null')) out.nullable = true
-    type = type.find((t) => t !== 'null') ?? 'string'
-  }
-  out.type = String(type).toUpperCase()
-  if (node.description) out.description = node.description
-  if (node.enum) out.enum = node.enum
-  if (node.required) out.required = node.required
-  if (node.properties) {
-    const props: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(node.properties as Record<string, Record<string, unknown>>)) props[k] = toGeminiSchema(v)
-    out.properties = props
-    out.propertyOrdering = Object.keys(props)
-  }
-  if (node.items) out.items = toGeminiSchema(node.items as Record<string, unknown>)
-  return out
-}
-
-const SYSTEM = `You turn the text around a beauty video into a structured routine, the way a recipe importer turns a cooking video into ingredients and steps. You are a careful transcriber of what the creator shared, not an expert filling gaps.
-
-Rules that must never be broken:
-- Use ONLY the evidence given. Never add a brand, product, shade, amount, timing or step that the evidence does not state. Your general knowledge of beauty products must not add anything.
-- A product needs a name in the evidence. If only a category is stated ("a sunscreen", "my toner", "this one is from CeraVe"), record what IS stated (category and, if named, the brand) as raw_product_name / raw_brand with confidence low — do not guess which specific product it is.
-- raw_text must be an exact quote copied from the evidence.
-- Steps only when the evidence states actions; keep the creator's order. If products are merely listed with no actions, return steps as an empty array.
-- timing_text and area_text only when explicitly mentioned.
-- Say nothing about whether anything is good for anyone. No claims, no advice.
-- If the evidence is not about a beauty routine at all, return routine_type "unknown", empty products and steps, and explain in notes.
-Return JSON only.`
+// ── Extraction (one call to KABINET's own server, which holds the Gemini key) ────
 
 type Extraction = {
   title: string; routine_type: string; description: string | null; skin_hair_context: string | null; confidence: Confidence; notes: string | null
@@ -226,52 +143,35 @@ type Extraction = {
   steps: Array<{ step_number: number; title: string | null; instruction: string; product_index: number | null; timing_text: string | null; area_text: string | null; confidence: Confidence }>
 }
 
-class GeminiError extends Error {
+class ExtractorError extends Error {
   readonly status: number
   constructor(status: number, message: string) {
     super(message)
-    this.name = 'GeminiError'
+    this.name = 'ExtractorError'
     this.status = status
   }
 }
 
-/** One generateContent call with a JSON schema. Tries the standard-JSON-Schema field first, then Gemini's own Schema shape. */
-async function geminiJson(model: string, system: string, user: string, schema: Record<string, unknown>, maxOutputTokens = 6000): Promise<{ data: unknown; usage: Record<string, unknown> | null; schemaField: string }> {
-  if (!GEMINI_KEY) throw new GeminiError(503, 'GEMINI_API_KEY is not configured on the server.')
-  const attempts: Array<[string, Record<string, unknown>]> = [
-    ['responseJsonSchema', { responseJsonSchema: schema }],
-    ['responseSchema', { responseSchema: toGeminiSchema(schema) }],
-  ]
-  let lastErr: GeminiError | null = null
-  for (const [field, cfg] of attempts) {
-    const res = await fetch(`${GEMINI_BASE}/models/${model}:generateContent`, {
+/**
+ * Server-to-server call to the fixed production extractor. Only the labelled evidence, the platform and the creator
+ * handle travel; the person's own session JWT is forwarded so the server can verify the same signed-in user.
+ * The extractor answers with the model's JSON, which is validated here before anything is stored.
+ */
+async function callExtractor(token: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  let res: Response
+  try {
+    res = await fetch(EXTRACTOR_URL, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_KEY },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: 'user', parts: [{ text: user }] }],
-        generationConfig: { temperature: 0, responseMimeType: 'application/json', maxOutputTokens, ...cfg },
-      }),
-      signal: AbortSignal.timeout(60_000),
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, 'User-Agent': UA },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(70_000),
     })
-    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>
-    if (!res.ok) {
-      const msg = ((body.error as { message?: string } | undefined)?.message ?? `HTTP ${res.status}`).slice(0, 300)
-      lastErr = new GeminiError(res.status, msg)
-      // Only a schema-shape rejection is worth retrying with the other field.
-      if (res.status === 400 && /schema|responseJsonSchema|response_json_schema/i.test(msg)) continue
-      throw lastErr
-    }
-    const cands = (body.candidates as Array<{ content?: { parts?: Array<{ text?: string }> }; finishReason?: string }> | undefined) ?? []
-    const text = cands[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? ''
-    if (!text) throw new GeminiError(502, `Gemini returned no content (${cands[0]?.finishReason ?? 'no candidate'}).`)
-    try {
-      return { data: JSON.parse(text), usage: (body.usageMetadata as Record<string, unknown>) ?? null, schemaField: field }
-    } catch {
-      throw new GeminiError(502, 'Gemini returned something that is not JSON.')
-    }
+  } catch (e) {
+    throw new ExtractorError(502, `KABINET's extraction server did not answer (${(e as Error).name === 'TimeoutError' ? 'timed out' : (e as Error).message}).`)
   }
-  throw lastErr ?? new GeminiError(502, 'Gemini did not answer.')
+  const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
+  if (!res.ok || data.ok !== true) throw new ExtractorError(res.status || 502, String(data.error ?? `The extraction server answered ${res.status}.`))
+  return data
 }
 
 const str0 = (v: unknown, max = 400): string | null => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null)
@@ -325,7 +225,7 @@ function validateExtraction(v: unknown, evidenceText: string): { x: Extraction; 
   return { x, dropped }
 }
 
-async function extract(platform: string, m: Meta, transcript: string | null, hashtags: string[]): Promise<Extraction> {
+async function extract(platform: string, m: Meta, transcript: string | null, hashtags: string[], token: string): Promise<{ x: Extraction; model: string | null }> {
   const parts = [
     m.title && `TITLE:\n${m.title}`,
     m.caption && m.caption !== m.title && `CAPTION:\n${m.caption}`,
@@ -333,10 +233,9 @@ async function extract(platform: string, m: Meta, transcript: string | null, has
     hashtags.length && `HASHTAGS:\n${hashtags.map((h) => `#${h}`).join(' ')}`,
     transcript && `TRANSCRIPT (what is said or written in the video, supplied by the person importing it):\n${transcript.slice(0, 12_000)}`,
   ].filter(Boolean) as string[]
-  const user = `Platform: ${platform}\nCreator: ${m.creatorHandle ?? m.creatorName ?? 'unknown'}\n\nEVIDENCE\n\n${parts.join('\n\n')}`
-  const { data } = await geminiJson(MODEL, SYSTEM, user, SCHEMA)
-  const { x } = validateExtraction(data, parts.join('\n'))
-  return x
+  const data = await callExtractor(token, { platform, creator: m.creatorHandle ?? m.creatorName ?? null, evidence: parts })
+  const { x } = validateExtraction(data.extraction, parts.join('\n'))
+  return { x, model: typeof data.model === 'string' ? data.model : null }
 }
 
 // ── Product resolution (catalog first, then lookup-product) ───────────────────
@@ -438,7 +337,7 @@ async function payload(importId: string, routineId: string | null) {
   return { import: imp, routine, products: products ?? [], steps: steps ?? [] }
 }
 
-async function runPipeline(importId: string, link: DetectedLink, userTranscript: string | null, userId: string): Promise<string> {
+async function runPipeline(importId: string, link: DetectedLink, userTranscript: string | null, userId: string, token: string): Promise<string> {
   // 1 · read the post
   await setStatus(importId, 'reading', { error: null })
   const m = await metadata(link)
@@ -462,9 +361,8 @@ async function runPipeline(importId: string, link: DetectedLink, userTranscript:
   if (!evidence.length) throw new Error(m.note ?? 'Nothing readable came back for this link. Paste the caption or what is said and try again.')
 
   // 3 · build the routine — one model call over the evidence
-  if (!GEMINI_KEY) throw new Error('KABINET\'s extraction is not configured yet (GEMINI_API_KEY missing). The post was read and kept; run it again once the key is set.')
   await setStatus(importId, 'extracting')
-  const x = await extract(link.platform, m, transcript, hashtags)
+  const { x, model } = await extract(link.platform, m, transcript, hashtags, token)
 
   // 4 · match products — the catalog first, then Open Beauty Facts through lookup-product
   await setStatus(importId, 'matching')
@@ -495,7 +393,7 @@ async function runPipeline(importId: string, link: DetectedLink, userTranscript:
   })
   if (steps.length) await db.from('routine_steps').insert(steps)
 
-  await setStatus(importId, 'ready', { extraction_confidence: x.confidence, model: MODEL })
+  await setStatus(importId, 'ready', { extraction_confidence: x.confidence, model })
   return routine.id
 }
 
@@ -511,36 +409,21 @@ Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return fail(405, 'POST only.')
   const who = await identify(req)
   if (who instanceof Response) return who
+  const { userId, token } = who
   const route = new URL(req.url).pathname.replace(/^.*\/import-routine/, '') || '/'
   const body = ((await req.json().catch(() => null)) ?? {}) as Record<string, unknown>
   const str = (v: unknown, max = 20_000) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null)
 
   try {
     if (route === '/diagnose') {
-      // Proves the secret is readable and the model answers. The key itself is never returned or logged.
-      // Names of secrets only (never values) so a mis-named key is diagnosable; `model` in the body tests a candidate without redeploying.
-      const envNames = Object.keys(Deno.env.toObject()).filter((n) => !/^(SUPABASE_|DENO_|SB_|HOME$|PATH$|HOSTNAME$|LANG|LC_|TERM|PWD$|USER$|SHELL$|TMPDIR$)/.test(n)).sort()
-      const model = str(body.model, 80) ?? MODEL
-      const out: Record<string, unknown> = { ok: false, key_present: !!GEMINI_KEY, model, default_model: MODEL, env_names: envNames }
-      if (!GEMINI_KEY) return json({ ...out, message: 'GEMINI_API_KEY is not set in the function secrets.' }, 503)
+      // Is KABINET's extraction server reachable and configured for this signed-in person? No model call, no keys returned.
+      const t0 = Date.now()
       try {
-        const list = await fetch(`${GEMINI_BASE}/models?pageSize=200`, { headers: { 'x-goog-api-key': GEMINI_KEY }, signal: AbortSignal.timeout(15_000) })
-        const lb = (await list.json().catch(() => ({}))) as { models?: Array<{ name: string; supportedGenerationMethods?: string[] }>; error?: { message?: string } }
-        out.models_endpoint = list.status
-        if (!list.ok) return json({ ...out, message: `Model listing failed: ${(lb.error?.message ?? `HTTP ${list.status}`).slice(0, 200)}` }, 502)
-        const names = (lb.models ?? []).filter((mm) => (mm.supportedGenerationMethods ?? []).includes('generateContent')).map((mm) => mm.name.replace(/^models\//, ''))
-        out.model_listed = names.includes(model)
-        out.flash_models = names.filter((n) => /flash/.test(n)).slice(0, 40)
-        const t0 = Date.now()
-        const r = await geminiJson(model, 'Answer with JSON only.', 'Return {"ok": true, "word": "kabinet"}', { type: 'object', required: ['ok', 'word'], properties: { ok: { type: 'boolean' }, word: { type: 'string' } } }, 64)
-        out.test_ms = Date.now() - t0
-        out.test_reply = r.data
-        out.schema_field = r.schemaField
-        out.usage = r.usage
-        return json({ ...out, ok: true, message: 'Gemini answered.' })
+        const data = await callExtractor(token, { ping: true })
+        return json({ ok: true, extractor: EXTRACTOR_URL, reachable: true, key_present: data.key_present === true, model: data.model ?? null, ms: Date.now() - t0, message: data.key_present === true ? 'Extraction server ready.' : 'Extraction server reachable, GEMINI_API_KEY not set on Vercel yet.' })
       } catch (e) {
-        const status = e instanceof GeminiError ? e.status : 502
-        return json({ ...out, message: (e as Error).message }, status)
+        const status = e instanceof ExtractorError ? e.status : 502
+        return json({ ok: false, extractor: EXTRACTOR_URL, reachable: status !== 502, ms: Date.now() - t0, message: (e as Error).message }, status)
       }
     }
 
@@ -554,7 +437,7 @@ Deno.serve(async (req: Request) => {
         const { data: cp } = await db.from('catalog_products').select('id').eq('id', cpId).maybeSingle()
         if (!cp) return fail(404, 'That catalog product does not exist.')
       }
-      const { data: row, error } = await db.from('routine_products').update({ catalog_product_id: cpId, resolution_status: cpId ? 'manual' : 'unresolved', resolved_by: who }).eq('id', rpId).select(PRODUCT_SELECT).single()
+      const { data: row, error } = await db.from('routine_products').update({ catalog_product_id: cpId, resolution_status: cpId ? 'manual' : 'unresolved', resolved_by: userId }).eq('id', rpId).select(PRODUCT_SELECT).single()
       if (error) throw new Error(error.message)
       await db.from('routine_steps').update({ catalog_product_id: cpId }).eq('routine_product_id', rpId)
       return json({ ok: true, product: row, message: cpId ? 'Linked.' : 'Left unresolved.' })
@@ -568,7 +451,7 @@ Deno.serve(async (req: Request) => {
       const link = detectPlatform(imp.source_url)
       if (!link) return fail(400, 'The stored link is not supported.')
       try {
-        const routineId = await runPipeline(importId, link, str(body.transcript), who)
+        const routineId = await runPipeline(importId, link, str(body.transcript), userId, token)
         return json({ ok: true, cached: false, ...(await payload(importId, routineId)) })
       } catch (e) {
         await setStatus(importId, 'failed', { error: (e as Error).message, status_message: null })
@@ -601,13 +484,13 @@ Deno.serve(async (req: Request) => {
     let importId = existing?.id ?? null
     if (!importId) {
       const { data, error } = await db.from('content_imports').insert({
-        platform: link.platform, source_url: url, canonical_url: link.canonicalUrl, source_content_id: link.sourceId ?? link.canonicalUrl, import_status: 'queued', created_by: who,
+        platform: link.platform, source_url: url, canonical_url: link.canonicalUrl, source_content_id: link.sourceId ?? link.canonicalUrl, import_status: 'queued', created_by: userId,
       }).select('id').single()
       if (error || !data) throw new Error(error?.message ?? 'Could not record the import.')
       importId = data.id
     }
     try {
-      const routineId = await runPipeline(importId, link, transcript, who)
+      const routineId = await runPipeline(importId, link, transcript, userId, token)
       return json({ ok: true, cached: false, ...(await payload(importId, routineId)) })
     } catch (e) {
       const message = (e as Error).message
