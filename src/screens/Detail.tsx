@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router'
 import { CollectionPicker } from '../components/CollectionPicker'
 import { CreateRoutineAction } from '../components/CreateRoutineAction'
-import { BlobVideo } from '../components/ImageView'
+import { MediaRenderer } from '../components/MediaRenderer'
 import { SocialPlayer } from '../components/SocialPlayer'
 import { sourceFromLook, sourceFromSave } from '../lib/routines/extract'
 import { PLATFORM_LABEL } from '../lib/social/platform'
@@ -82,7 +82,7 @@ export default function Detail() {
             // Social saves are video: poster first, the platform's own player on tap.
             <SocialPlayer save={save} social={save.social} style={{ viewTransitionName: `s-${vtId}` }} />
           ) : item.image.kind === 'video' ? (
-            <BlobVideo id={item.image.id} controls className="relative w-full overflow-hidden bg-muted" style={{ aspectRatio: `${item.image.w} / ${item.image.h}`, viewTransitionName: `s-${vtId}` }} />
+            <MediaRenderer media={{ kind: 'video', id: item.image.id, w: item.image.w, h: item.image.h }} controls style={{ viewTransitionName: `s-${vtId}` }} />
           ) : (
             <ImageView image={item.image} alt={title ?? ''} priority style={{ viewTransitionName: `s-${vtId}` }} />
           )}
@@ -138,7 +138,7 @@ export default function Detail() {
             <section id="products" className="flex scroll-mt-[72px] flex-col">
               <p className="m-0 type-eyebrow text-muted-foreground">Products in this look · {products.length}</p>
               {products.map((p) => (
-                <ProductCard key={p.id} product={p} onSave={setSavingProduct} />
+                <ProductCard key={p.id} product={p} onSave={setSavingProduct} layout="row" />
               ))}
             </section>
           )}

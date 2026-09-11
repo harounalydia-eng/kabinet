@@ -74,8 +74,7 @@ export default function Explore() {
         <DiscoveryGrid items={looks} revealKey={seg} />
       ) : (
         <>
-          <p className="m-0 mb-xs type-meta text-muted-foreground">Products from these looks. Facts and formulation, then the retailer.</p>
-          <div className="grid grid-cols-1 gap-x-2xl md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-2 gap-x-[10px] gap-y-lg sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {products.map((p) => (
               <ProductCard key={p.id} product={p} onSave={setSavingProduct} />
             ))}

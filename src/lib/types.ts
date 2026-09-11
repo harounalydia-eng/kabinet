@@ -32,6 +32,8 @@ export interface Product {
   retailer?: string
   purchaseUrl?: string
   affiliateUrl?: string
+  /** The canonical record in Supabase catalog_products; its image_url is the product's photograph. */
+  catalogProductId?: string
   /** Factual, formulation-focused copy. No medical claims. */
   description?: string
   whatItIs?: string

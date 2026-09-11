@@ -16,14 +16,23 @@ export type Tone = keyof typeof T
 export const tone = (t: Tone, w: number, h: number, label?: string) =>
   ({ kind: 'tone', tone: T[t][0], tone2: T[t][1], label, w: w * 200, h: h * 200 }) as const
 
+/**
+ * A product photograph from KABINET's catalog (catalog_products.image_url), snapshotted here so the
+ * product renders before — and without — a network round trip. `catalogProductId` is the live link;
+ * ProductImage re-resolves it when the row changes. Products with no catalog match keep a tone tile.
+ */
+export const packshot = (url: string, w: number, h: number) => ({ kind: 'url', url, w, h }) as const
+
 /* No demo shelf: My Kabinet only ever contains what the user adds. */
 export const OWNED_SEED: OwnedProduct[] = []
 
-/* ── Products that appear in looks. No compatibility is stored here: it is only ever computed for a real profile. ── */
+/* ── Products that appear in looks. No compatibility is stored here: it is only ever computed for a real profile.
+   Resolved against catalog_products on 2026-09-11: 7 of 12 matched (catalogProductId + packshot); the other 5 are
+   not in Open Beauty Facts yet and keep their tone tile until a provider has them. ── */
 const P = {
   diorGlow: {
     id: 'p-dior-glow', brand: 'Dior', productName: 'Forever Skin Glow', category: 'Makeup', productType: 'Foundation', role: 'base',
-    image: tone('ivory', 3, 4), price: 59, currency: '€', retailer: 'Sephora', purchaseUrl: 'https://www.sephora.fr/',
+    catalogProductId: 'c7c6ea46-2712-4e39-ab9e-a80e3470ae32', image: packshot('https://images.openbeautyfacts.org/images/products/334/890/161/4900/front_en.4.full.jpg', 1846, 2096), price: 59, currency: '€', retailer: 'Sephora', purchaseUrl: 'https://www.sephora.fr/',
     whatItIs: 'A radiant-finish liquid foundation with SPF.',
     designedTo: 'Even the look of skin tone with a luminous finish and medium, buildable coverage.',
     description: 'A hydrating, radiant foundation designed for a glow that reads as skin rather than makeup.',
@@ -51,7 +60,7 @@ const P = {
   },
   rareSpf: {
     id: 'p-supergoop', brand: 'Supergoop!', productName: 'Unseen Sunscreen SPF 40', category: 'Skin', productType: 'Sunscreen', role: 'spf',
-    image: tone('sand', 3, 4), price: 38, currency: '€', retailer: 'Sephora', purchaseUrl: 'https://www.sephora.fr/',
+    catalogProductId: 'c8792f75-23c0-4116-9fd2-ccd75fdf045b', image: packshot('https://images.openbeautyfacts.org/images/products/081/621/802/6530/front_en.3.full.jpg', 534, 800), price: 38, currency: '€', retailer: 'Sephora', purchaseUrl: 'https://www.sephora.fr/',
     whatItIs: 'A clear, weightless gel sunscreen with a primer-like finish.',
     designedTo: 'Provide broad-spectrum SPF 40 with no visible cast under makeup.',
     ingredients: ['Dimethicone', 'Squalane', 'Vitamin E', 'Phenoxyethanol'],
@@ -60,7 +69,7 @@ const P = {
   },
   lipstick: {
     id: 'p-mac-ruby', brand: 'MAC', productName: 'Ruby Woo', category: 'Makeup', productType: 'Lipstick', role: 'lip',
-    image: tone('wine', 3, 4), price: 24, currency: '€', retailer: 'MAC', purchaseUrl: 'https://www.maccosmetics.fr/',
+    catalogProductId: '3a8265dd-32ff-495f-b103-b9418042a150', image: packshot('https://images.openbeautyfacts.org/images/products/077/360/204/0605/front_en.8.full.jpg', 216, 904), price: 24, currency: '€', retailer: 'MAC', purchaseUrl: 'https://www.maccosmetics.fr/',
     whatItIs: 'A retro-matte lipstick in a blue-toned red.',
     designedTo: 'Deliver a highly pigmented, long-wearing matte finish.',
     ingredients: ['Castor oil', 'Pigments', 'Vitamin E'],
@@ -69,7 +78,7 @@ const P = {
   },
   curlGel: {
     id: 'p-eco-gel', brand: 'Eco Style', productName: 'Olive Oil Gel', category: 'Hair', productType: 'Styling gel', role: 'gel',
-    image: tone('mocha', 3, 4), price: 7, currency: '€', retailer: 'Amazon', purchaseUrl: 'https://www.amazon.fr/',
+    catalogProductId: '97ee1566-b102-4750-ad68-8e354d4d720a', image: packshot('https://images.openbeautyfacts.org/images/products/074/837/800/1112/front_en.9.full.jpg', 562, 750), price: 7, currency: '€', retailer: 'Amazon', purchaseUrl: 'https://www.amazon.fr/',
     whatItIs: 'A firm-hold styling gel with olive oil.',
     designedTo: 'Set curls and coils with a cast that scrunches out once dry.',
     ingredients: ['Aqua', 'Olive oil', 'Glycerin', 'Fragrance'],
@@ -78,7 +87,7 @@ const P = {
   },
   leaveIn: {
     id: 'p-curlsmith', brand: 'Curlsmith', productName: 'Weightless Air Dry Cream', category: 'Hair', productType: 'Curl cream', role: 'curl-cream',
-    image: tone('stone', 3, 4), price: 26, currency: '€', retailer: 'Sephora', purchaseUrl: 'https://www.sephora.fr/',
+    catalogProductId: '294d2d60-7be5-405d-b94c-1b39329c0345', image: packshot('https://images.openbeautyfacts.org/images/products/085/000/541/7163/front_en.8.full.jpg', 822, 1884), price: 26, currency: '€', retailer: 'Sephora', purchaseUrl: 'https://www.sephora.fr/',
     whatItIs: 'A light leave-in cream for wash-and-go styling.',
     designedTo: 'Define curls with soft hold and reduce frizz when air-drying or diffusing.',
     ingredients: ['Aqua', 'Glycerin', 'Flaxseed extract', 'Panthenol', 'Jojoba oil'],
@@ -104,7 +113,7 @@ const P = {
   },
   bodyOil: {
     id: 'p-nuxe', brand: 'Nuxe', productName: 'Huile Prodigieuse', category: 'Body', productType: 'Body oil', role: 'body-oil',
-    image: tone('sand', 3, 4), price: 32, currency: '€', retailer: 'Nuxe', purchaseUrl: 'https://www.nuxe.com/',
+    catalogProductId: 'f4b12cd1-c27c-459c-a92d-69205264922f', image: packshot('https://images.openbeautyfacts.org/images/products/326/468/001/1016/front_fr.10.full.jpg', 3024, 4032), price: 32, currency: '€', retailer: 'Nuxe', purchaseUrl: 'https://www.nuxe.com/',
     whatItIs: 'A dry oil for face, body and hair.',
     designedTo: 'Soften and add a satin sheen without a greasy feel.',
     ingredients: ['Sweet almond oil', 'Macadamia oil', 'Argan oil', 'Vitamin E', 'Fragrance'],
@@ -113,7 +122,7 @@ const P = {
   },
   cleanser: {
     id: 'p-cerave', brand: 'CeraVe', productName: 'Hydrating Cleanser', category: 'Skin', productType: 'Cleanser', role: 'cleanse',
-    image: tone('ivory', 3, 4), price: 11, currency: '€', retailer: 'Pharmacy',
+    catalogProductId: 'e8b4d940-68da-40e2-8979-62c638e2a3f6', image: packshot('https://images.openbeautyfacts.org/images/products/333/787/559/7180/front_en.35.full.jpg', 1280, 2276), price: 11, currency: '€', retailer: 'Pharmacy',
     whatItIs: 'A non-foaming cream cleanser.',
     designedTo: 'Cleanse without stripping, with ceramides and hyaluronic acid in the base.',
     ingredients: ['Aqua', 'Glycerin', 'Ceramides', 'Hyaluronic acid', 'Phenoxyethanol'],

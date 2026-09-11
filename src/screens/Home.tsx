@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Link } from 'react-router'
 import { DiscoveryGrid } from '../components/DiscoveryGrid'
 import { ImageView } from '../components/ImageView'
+import { ProductImage } from '../components/ProductImage'
 import { RoutineCard } from '../components/RoutineCard'
 import { fromSave } from '../lib/feed'
 import { useProfile } from '../lib/profile'
@@ -105,7 +106,7 @@ function MobileHome() {
           <div className="no-scrollbar -mx-(--mobile-page-gutter) flex gap-[6px] overflow-x-auto px-(--mobile-page-gutter)">
             {owned.slice(0, 8).map((o) => (
               <Link key={o.id} to="/kabinet" className="flex w-[104px] shrink-0 flex-col gap-[6px]">
-                <div className="aspect-[3/4] overflow-hidden rounded-content bg-muted">{o.image && <ImageView fill image={o.image} />}</div>
+                <div className="overflow-hidden rounded-content bg-muted"><ProductImage catalogProductId={o.catalogProductId} fallback={o.image} ratio="3/4" /></div>
                 <span className="truncate type-meta text-foreground">{o.productName}</span>
               </Link>
             ))}

@@ -4,7 +4,7 @@ import { CategoryFilter } from '../components/CategoryFilter'
 import { ContextualSearch, useSearchContext } from '../components/ContextualSearch'
 import { DiscoveryGrid } from '../components/DiscoveryGrid'
 import { INTENTS } from '../components/DiscoverySearch'
-import { ImageView } from '../components/ImageView'
+import { ProductImage } from '../components/ProductImage'
 import { CollectionCover } from '../components/CollectionCover'
 import { CATALOG, PRODUCTS } from '../lib/catalog'
 import { RoutineCard } from '../components/RoutineCard'
@@ -109,7 +109,7 @@ export default function Search() {
             </section>
           )}
           {ctx.scope === 'shop' && (
-            <section className="grid grid-cols-1 gap-x-2xl md:grid-cols-2 xl:grid-cols-3">
+            <section className="grid grid-cols-2 gap-x-[10px] gap-y-lg sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {shop.map((p) => (
                 <ProductCard key={p.id} product={p} />
               ))}
@@ -120,7 +120,7 @@ export default function Search() {
               <p className="m-0 type-eyebrow text-muted-foreground">On your shelf · {shelf.length}</p>
               {shelf.map((o) => (
                 <Link key={o.id} to="/kabinet" className="flex items-center gap-md py-[6px]">
-                  <div className="w-[40px] shrink-0 overflow-hidden rounded-content bg-muted">{o.image ? <ImageView image={o.image} /> : <div className="aspect-[3/4]" />}</div>
+                  <div className="w-[44px] shrink-0 overflow-hidden rounded-content bg-muted"><ProductImage catalogProductId={o.catalogProductId} fallback={o.image} ratio="3/4" /></div>
                   <div className="flex min-w-0 flex-col">
                     <span className="type-eyebrow text-muted-foreground">{o.brand}</span>
                     <span className="type-body text-foreground">{o.productName}</span>

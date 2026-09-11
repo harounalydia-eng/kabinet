@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router'
-import { ImageView } from './ImageView'
+import { MediaRenderer, mediaFor } from './MediaRenderer'
 import { cx } from '../lib/cx'
 import type { FeedItem } from '../lib/feed'
 import { useStore } from '../lib/store'
@@ -34,7 +34,7 @@ export function InspirationCard({ item, index = 0, onSave }: InspirationCardProp
         saved && settled.has(saved.id) ? 'tile-settle' : 'tile-in',
       )}
     >
-      <ImageView image={item.image} alt={item.title ?? ''} className="transition-transform duration-(--motion-page) ease-soft group-hover:scale-[1.025]" style={{ viewTransitionName: `s-${item.id}` }} />
+      <MediaRenderer media={mediaFor(item)} autoplay alt={item.title ?? ''} className="transition-transform duration-(--motion-page) ease-soft group-hover:scale-[1.025]" style={{ viewTransitionName: `s-${item.id}` }} />
 
       {/* Hover layer — desktop only. Readability gradient stays subtle. */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 hidden opacity-0 transition-opacity duration-(--motion-standard) ease-soft group-hover:opacity-100 [@media(hover:hover)]:block">
