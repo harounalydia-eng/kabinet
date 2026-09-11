@@ -59,7 +59,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!userId) return res.status(401).json({ ok: false, error: 'Sign in to KABINET to import a routine.' })
 
   const body = (req.body && typeof req.body === 'object' ? req.body : {}) as Partial<ExtractionRequest> & { ping?: boolean }
-  if (body.ping === true) return res.status(200).json({ ok: true, ping: true, model: MODEL, key_present: !!geminiKey })
+  if (body.ping === true) {
+    // Reachability + configuration. With a key present, also list the Flash models this key can call (names only).
+    let flashModels: string[] | null = null
+    let modelListed: boolean | null = null
+    if (geminiKey) {
+      try {
+        const r = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': geminiKey }, signal: AbortSignal.timeout(8000) })
+        const j = (await r.json().catch(() => ({}))) as { models?: Array<{ name: string; supportedGenerationMethods?: string[] }> }
+        if (r.ok) {
+          const names = (j.models ?? []).filter((m) => (m.supportedGenerationMethods ?? []).includes('generateContent')).map((m) => m.name.replace(/^models\//, ''))
+          flashModels = names.filter((n) => /flash/.test(n))
+          modelListed = names.includes(MODEL)
+        }
+      } catch { /* listing is informational */ }
+    }
+    return res.status(200).json({ ok: true, ping: true, model: MODEL, key_present: !!geminiKey, model_listed: modelListed, flash_models: flashModels })
+  }
   if (!geminiKey) return res.status(503).json({ ok: false, error: "KABINET's extraction is not configured yet (GEMINI_API_KEY missing on the server)." })
 
   const platform = typeof body.platform === 'string' && PLATFORMS.has(body.platform) ? body.platform : null
