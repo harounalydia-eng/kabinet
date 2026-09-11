@@ -65,13 +65,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     ;(async () => {
       try {
         let [s, c, o, r] = await Promise.all([idb.getAll<Save>('saves'), idb.getAll<Collection>('collections'), idb.getAll<OwnedProduct>('owned'), idb.getAll<Routine>('routines')])
-        if (s.length === 0 && c.length === 0 && localStorage.getItem(SEED_FLAG) !== 'done') {
-          const now = Date.now()
-          s = seedSaves(now)
-          c = seedCollections(now)
-          await Promise.all([...s.map((x) => idb.put('saves', x.id, x)), ...c.map((x) => idb.put('collections', x.id, x))])
-          localStorage.setItem(SEED_FLAG, 'done')
-        }
+        // A new Kabinet starts empty — its first content is what the person saves. Demo tiles stay available from Settings.
+        if (s.length === 0 && c.length === 0 && localStorage.getItem(SEED_FLAG) !== 'done') localStorage.setItem(SEED_FLAG, 'done')
         if (o.length === 0 && OWNED_SEED.length > 0 && localStorage.getItem(SEED_FLAG + ':owned') !== 'done') {
           o = OWNED_SEED
           await Promise.all(o.map((x) => idb.put('owned', x.id, x)))

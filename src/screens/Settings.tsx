@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react'
+import { Link } from 'react-router'
 import { Header } from '../components/Header'
-import { ImportFromPhone } from '../components/ImportFromPhone'
+import { SaveToKabinet } from '../components/SaveToKabinet'
 import { GridDensitySelector, ThemeSelector } from '../components/ProfileMenu'
+import { useAuth } from '../lib/auth'
 import { idb } from '../lib/db'
 import { blobToDataUrl, dataUrlToBlob } from '../lib/images'
 import { useStore, type NewSave } from '../lib/store'
@@ -25,6 +27,7 @@ function Action({ label, onClick, tone = 'ink' }: { label: string; onClick: () =
 /** Account and device settings. Nothing about skin, hair or goals lives here — that is the Beauty Profile. */
 export default function Settings() {
   const { saves, collections, addSaves, addCollection, removeSeed, restoreSeed, resetAll } = useStore()
+  const { user, available, signOut } = useAuth()
   const fileRef = useRef<HTMLInputElement>(null)
   const [confirmReset, setConfirmReset] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
@@ -95,10 +98,19 @@ export default function Settings() {
 
         <section className="flex flex-col gap-2xs">
           <p className="m-0 mb-xs type-eyebrow text-muted-foreground">Account</p>
-          <p className="m-0 type-body-sm text-muted-foreground">Sign-in is not part of this build. Everything is kept on this device.</p>
+          {available && user ? (
+            <>
+              <p className="m-0 type-body text-foreground">{user.email ?? 'Signed in'}</p>
+              <p className="m-0 type-body-sm text-muted-foreground">Your choices and your Shortcut connection follow this account. Saves stay on this device for now.</p>
+              <Link to="/onboarding/shortcut?replay=1" className="w-fit py-[6px] type-body font-medium text-foreground">See the introduction again</Link>
+              <Action label="Sign out" tone="secondary" onClick={() => void signOut()} />
+            </>
+          ) : (
+            <p className="m-0 type-body-sm text-muted-foreground">Accounts are not switched on in this build. Everything is kept on this device.</p>
+          )}
         </section>
 
-        <ImportFromPhone />
+        <SaveToKabinet />
 
         <section className="flex flex-col gap-2xs">
           <p className="m-0 mb-xs type-eyebrow text-muted-foreground">Your data</p>

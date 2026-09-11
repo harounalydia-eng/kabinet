@@ -29,13 +29,23 @@ function resolve(pref: ThemePreference): ResolvedTheme {
   return resolveTheme(pref, window.matchMedia(MQ).matches)
 }
 
+/** While the dark entry covers the viewport the browser chrome follows it, not the theme (src/components/Splash.tsx). */
+let themeColorOverride: string | null = null
+function paintThemeColor(theme: ResolvedTheme) {
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeColorOverride ?? THEME_COLOR[theme])
+}
+export function setThemeColorOverride(color: string | null) {
+  themeColorOverride = color
+  paintThemeColor(document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light')
+}
+
 /** Mirrors the inline boot script in index.html so there is never a flash. The only place the DOM is themed. */
 function apply(theme: ResolvedTheme, pref: ThemePreference) {
   const root = document.documentElement
   root.dataset.theme = theme
   root.dataset.themePreference = pref
   root.style.colorScheme = theme
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLOR[theme])
+  paintThemeColor(theme)
   swapFavicon(FAVICON[theme])
 }
 

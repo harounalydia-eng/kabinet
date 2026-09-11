@@ -138,11 +138,14 @@
 }
 @utility page-enter { animation: page-in var(--motion-standard) var(--ease-soft) both; }
 
-/* ── Splash: background, then the wordmark fades in and breathes once ── */
-@keyframes splash-logo-in { from { opacity: 0; transform: scale(0.98); } to { opacity: 0.85; transform: scale(0.98); } }
-@keyframes splash-breathe { from { opacity: 0.85; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
-@keyframes splash-logo-out { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(1.01); } }
-@keyframes splash-bg-out { from { opacity: 1; } to { opacity: 0; } }
+/* ── Entry: dark before the lights come on ──
+   Not the dark theme — a brand moment. Dark = KABINET entering / processing; ivory = the everyday product; oxblood = action.
+   Every delay is measured from navigation start via --t0 (negative), so React resumes exactly where index.html's boot paint was. */
+:root { --entry-bg: #0E0E0E; --entry-fg: #EDE8DF; }
+@keyframes entry-icon-in { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
+@keyframes entry-letter-in { 0% { opacity: 0; } 35% { opacity: 0.8; } 55% { opacity: 0.3; } 100% { opacity: 1; } }
+@keyframes entry-out { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(1.02); } }
+@keyframes welcome-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes unfold-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes toolbar-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes tile-in { from { opacity: 0; transform: scale(0.985); } to { opacity: 1; transform: scale(1); } }
@@ -150,17 +153,19 @@
 @keyframes skeleton { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
 @keyframes indeterminate { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
 @layer components {
-  .splash { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: var(--background); }
-  .splash-logo {
-    animation:
-      splash-logo-in 300ms var(--ease-soft) both,
-      splash-breathe 500ms var(--ease-soft) 300ms both;
-  }
-  .splash[data-leaving] { animation: splash-bg-out 500ms var(--ease-soft) 120ms both; pointer-events: none; }
-  .splash[data-leaving] .splash-logo { animation: splash-logo-out 400ms var(--ease-soft) both; }
+  .entry { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: var(--entry-bg); color: var(--entry-fg); --t0: 0ms; }
+  .entry-brand { display: flex; flex-direction: column; align-items: center; gap: 22px; }
+  .entry-icon { display: inline-flex; animation: entry-icon-in 520ms var(--ease-soft) calc(var(--t0) + 200ms) both; }
+  .entry-word { display: flex; font-size: 13px; line-height: 1; font-weight: 600; letter-spacing: 0.18em; margin-right: -0.18em; text-transform: uppercase; }
+  .entry-word > span { animation: entry-letter-in 160ms linear calc(var(--t0) + 1000ms + var(--i, 0) * 45ms) both; }
+  /* Dissolve: opacity plus a breath of depth. The welcome already exists underneath. */
+  .entry[data-leaving] { animation: entry-out 520ms var(--ease-soft) both; pointer-events: none; }
+  /* The welcome typography waits for the ivory to breathe (~200ms after the dissolve has cleared) */
+  [data-phase="showing"] .welcome-in { opacity: 0; }
+  [data-phase="leaving"] .welcome-in { animation: welcome-in 450ms var(--ease-soft) 650ms both; }
   /* The app unfolds underneath: content first, navigation last */
-  [data-phase="leaving"] .app-content { animation: unfold-in var(--motion-page) var(--ease-soft) 160ms both; }
-  [data-phase="leaving"] .app-nav { animation: toolbar-in 400ms var(--ease-soft) 420ms both; }
+  [data-phase="leaving"] .app-content { animation: unfold-in var(--motion-page) var(--ease-soft) 260ms both; }
+  [data-phase="leaving"] .app-nav { animation: toolbar-in 400ms var(--ease-soft) 520ms both; }
   [data-phase="showing"] .app-nav { opacity: 0; }
   .tile-in { animation: tile-in var(--motion-page) var(--ease-soft) both; }
   .tile-settle { animation: tile-settle 520ms var(--ease-soft) both; }

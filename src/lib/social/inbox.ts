@@ -1,15 +1,17 @@
 /**
- * Import inbox — links shared into KABINET from outside the browser (an iOS Shortcut
+ * Import inbox — links shared into KABINET from outside the browser (the iPhone Shortcut
  * on the share sheet posts to the `import` edge function; the app pulls them here).
- * The device token is the only credential: generated locally, shown once in Settings,
- * never sent anywhere but the import endpoint.
+ *
+ * Identity is the signed-in account. The app calls the endpoint with the session; the
+ * Shortcut calls it with a device token minted for that account by exchanging a one-time
+ * pairing code. Tokens are stored hashed on the server and can be disconnected in Settings.
  */
 import { guessCategory } from '../routines/textExtract'
 import type { NewSave } from '../store'
+import { supabase, supabaseUrl } from '../supabase'
 import { embedUrlFor } from './embed'
 import { PLATFORM_LABEL, type SocialPlatform } from './platform'
 
-export const IMPORT_TOKEN_KEY = 'kabinet-inspo:import-token'
 export const INBOX_SYNC_EVENT = 'kabinet:inbox-sync'
 
 export interface InboxRow {
@@ -35,40 +37,25 @@ export interface InboxRow {
   imported_at: string | null
 }
 
+export interface ImportToken {
+  id: string
+  label: string
+  created_at: string
+  last_used_at: string | null
+  revoked_at: string | null
+}
+
+export interface Pairing {
+  code: string
+  expires_at: string
+}
+
 export function importEndpoint(): string | null {
-  const base = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim()
-  return base ? `${base.replace(/\/$/, '')}/functions/v1/import` : null
+  return supabaseUrl ? `${supabaseUrl.replace(/\/$/, '')}/functions/v1/import` : null
 }
 
-export const importEnabled = () => importEndpoint() !== null
-
-function generateToken(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(27))
-  const b64 = btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-  return `kbt_${b64}`
-}
-
-export function getImportToken(): string {
-  try {
-    const t = localStorage.getItem(IMPORT_TOKEN_KEY)
-    if (t && /^kbt_[A-Za-z0-9_-]{32,64}$/.test(t)) return t
-    const fresh = generateToken()
-    localStorage.setItem(IMPORT_TOKEN_KEY, fresh)
-    return fresh
-  } catch {
-    return generateToken()
-  }
-}
-
-export function regenerateImportToken(): string {
-  const fresh = generateToken()
-  try {
-    localStorage.setItem(IMPORT_TOKEN_KEY, fresh)
-  } catch {
-    /* storage unavailable */
-  }
-  return fresh
-}
+/** Saving through the server needs the endpoint and a signed-in session. */
+export const importEnabled = () => importEndpoint() !== null && supabase !== null
 
 /** Everything the platform legitimately gave us, joined — the same Level 1 text the in-app import uses. */
 const availableText = (r: InboxRow) => [r.title, r.caption].filter((t): t is string => Boolean(t && t.trim())).join('\n')
@@ -109,16 +96,24 @@ export function inboxRowToSave(r: InboxRow): NewSave {
   }
 }
 
+async function sessionToken(): Promise<string> {
+  if (!supabase) throw new Error('Accounts are not available in this build.')
+  const { data } = await supabase.auth.getSession()
+  const t = data.session?.access_token
+  if (!t) throw new Error('Sign in to save through KABINET.')
+  return t
+}
+
 async function call(method: 'GET' | 'POST' | 'PATCH', path = '', body?: unknown) {
   const ep = importEndpoint()
-  if (!ep) throw new Error('Import is not configured.')
+  if (!ep) throw new Error('Saving is not configured.')
   const res = await fetch(ep + path, {
     method,
-    headers: { Authorization: `Bearer ${getImportToken()}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
+    headers: { Authorization: `Bearer ${await sessionToken()}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
     body: body ? JSON.stringify(body) : undefined,
   })
   const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
-  if (!res.ok) throw new Error(typeof data.error === 'string' ? data.error : `Import endpoint returned ${res.status}.`)
+  if (!res.ok) throw new Error(typeof data.message === 'string' ? data.message : typeof data.error === 'string' ? data.error : `Saving failed (${res.status}).`)
   return data
 }
 
@@ -136,6 +131,27 @@ export async function fetchInbox(): Promise<InboxRow[]> {
 export async function ackInbox(ids: string[], status: 'imported' | 'failed' = 'imported', error?: string): Promise<void> {
   if (ids.length === 0) return
   await call('PATCH', '', { ids, status, error })
+}
+
+/** A fresh one-time code for the Shortcut's first run. Valid ten minutes; replaces any earlier unused code. */
+export async function createPairing(): Promise<Pairing> {
+  const data = await call('POST', '/pairings')
+  return { code: String(data.code), expires_at: String(data.expires_at) }
+}
+
+/** The Shortcut connections on this account (read through RLS — only the owner sees them). */
+export async function listTokens(): Promise<ImportToken[]> {
+  if (!supabase) return []
+  const { data, error } = await supabase.from('import_tokens').select('id, label, created_at, last_used_at, revoked_at').order('created_at', { ascending: false })
+  if (error) throw new Error(error.message)
+  return (data ?? []) as ImportToken[]
+}
+
+/** Disconnect every Shortcut on this account. The Shortcut then asks for a new code on its next run. */
+export async function revokeAllTokens(): Promise<void> {
+  if (!supabase) return
+  const { error } = await supabase.from('import_tokens').update({ revoked_at: new Date().toISOString() }).is('revoked_at', null)
+  if (error) throw new Error(error.message)
 }
 
 /** Ask the running sync hook to check the inbox now (Settings → Check now). */

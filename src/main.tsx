@@ -10,18 +10,24 @@ import { StoreProvider } from './lib/store'
 import { UIProvider } from './lib/ui'
 import { ThemeProvider } from './lib/theme'
 import { ProfileProvider } from './lib/profile'
+import { AuthProvider } from './lib/auth'
+import { AccountProvider } from './lib/account'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <Router>
       <ThemeProvider>
-      <StoreProvider>
-        <UIProvider>
-          <ProfileProvider>
-            <App />
-          </ProfileProvider>
-        </UIProvider>
-      </StoreProvider>
+        <AuthProvider>
+          <AccountProvider>
+            <StoreProvider>
+              <UIProvider>
+                <ProfileProvider>
+                  <App />
+                </ProfileProvider>
+              </UIProvider>
+            </StoreProvider>
+          </AccountProvider>
+        </AuthProvider>
       </ThemeProvider>
     </Router>
   </StrictMode>,

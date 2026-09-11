@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { ackInbox, fetchInbox, importEnabled, inboxRowToSave, INBOX_SYNC_EVENT } from './inbox'
+import { useAuth } from '../auth'
 import { useStore } from '../store'
 
 const MIN_INTERVAL = 20_000
@@ -11,11 +12,12 @@ const MIN_INTERVAL = 20_000
  */
 export function useInboxSync() {
   const { ready, addSaves } = useStore()
+  const { user } = useAuth()
   const last = useRef(0)
   const busy = useRef(false)
 
   useEffect(() => {
-    if (!ready || !importEnabled()) return
+    if (!ready || !importEnabled() || !user) return
     const sync = async (force = false) => {
       if (busy.current) return
       if (!force && Date.now() - last.current < MIN_INTERVAL) return
@@ -45,5 +47,5 @@ export function useInboxSync() {
       window.removeEventListener('focus', onFocus)
       window.removeEventListener(INBOX_SYNC_EVENT, onRequest)
     }
-  }, [ready, addSaves])
+  }, [ready, addSaves, user])
 }

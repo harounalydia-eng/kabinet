@@ -37,37 +37,31 @@ function MobileHome() {
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
 
-  if (feed.length === 0 && routines.length === 0 && owned.length === 0) {
-    return (
-      <div className="flex flex-col gap-md">
-        <div className="-mx-(--mobile-page-gutter) flex h-[52px] items-center justify-between px-(--mobile-page-gutter)">
-          <KabinetLogo size={24} to="/" />
-          <ProfileMenu />
-        </div>
-        <p className="m-0 type-eyebrow text-muted-foreground">Your Kabinet</p>
-        <h1 className="m-0 type-title max-md:text-[24px] text-foreground">Save it here. Use it later.</h1>
-        <p className="m-0 type-body-sm text-muted-foreground">Paste a TikTok, Instagram or YouTube link, add photos, or start from Explore.</p>
-        <button type="button" onClick={() => openSave()} className="inline-flex h-[38px] w-fit items-center rounded-full bg-primary px-[16px] type-body-sm font-medium text-primary-foreground">Add to KABINET</button>
-      </div>
-    )
-  }
-
   return (
-    <div className="flex flex-col gap-[24px]">
-      <div className="-mx-(--mobile-page-gutter) flex h-[52px] items-center justify-between px-(--mobile-page-gutter)">
+    <div className="mx-auto flex w-full max-w-[880px] flex-col gap-[24px]">
+      <div className="-mx-(--mobile-page-gutter) flex h-[52px] items-center justify-between px-(--mobile-page-gutter) sm:hidden">
         <KabinetLogo size={24} to="/" />
         <ProfileMenu />
       </div>
-      <h1 className="m-0 -mt-[8px] type-title max-md:text-[24px] text-foreground">
+      <h1 className="m-0 -mt-[8px] type-title max-md:text-[24px] text-foreground sm:mt-[8px]">
         {greeting}{profile.name ? `, ${profile.name.split(' ')[0]}.` : '.'}
       </h1>
 
-      {recent.length > 0 && (
-        <section className="flex flex-col gap-sm">
-          <Row eyebrow={`Recently saved · ${feed.length}`} to="/saved" more="See all" />
+      <section className="flex flex-col gap-sm">
+        <Row eyebrow={`Recently saved${feed.length ? ` · ${feed.length}` : ''}`} to="/saved" more="See all" />
+        {recent.length > 0 ? (
           <DiscoveryGrid items={recent} revealKey="home" />
-        </section>
-      )}
+        ) : (
+          <div className="flex flex-col gap-[12px] rounded-tile-sm bg-surface p-[16px]">
+            <p className="m-0 type-body text-foreground">Nothing saved yet. Everything you send to KABINET lands here first.</p>
+            <p className="m-0 type-body-sm text-muted-foreground">Share a TikTok, Reel or YouTube video with Save to KABINET, or paste a link and add photos here.</p>
+            <div className="flex flex-wrap gap-[8px]">
+              <button type="button" onClick={() => openSave()} className="inline-flex h-[38px] items-center rounded-full bg-primary px-[16px] type-body-sm font-medium text-primary-foreground">Add to KABINET</button>
+              <Link to="/settings" className="inline-flex h-[38px] items-center rounded-full bg-background px-[16px] type-body-sm font-medium text-foreground">Set up the Shortcut</Link>
+            </div>
+          </div>
+        )}
+      </section>
 
       <section className="flex flex-col gap-sm">
         <Row eyebrow={`Your routines · ${routines.length}`} to="/routines" more={routines.length ? 'See all' : 'New'} />

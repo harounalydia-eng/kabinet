@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
-    <meta name="theme-color" content="#F4F2EC" />
+    <meta name="theme-color" content="#0E0E0E" />
     <!-- Browser tab: the K alone on a transparent canvas, swapped with the resolved theme (src/lib/theme.tsx). -->
     <link id="favicon" rel="icon" type="image/svg+xml" href="/brand/favicon-light.svg?v=4" />
     <script>
@@ -20,8 +20,6 @@
         var f = document.getElementById('favicon');
         var want = t === 'dark' ? '/brand/favicon-dark.svg?v=4' : '/brand/favicon-light.svg?v=4';
         if (f && f.getAttribute('href') !== want) { var n = f.cloneNode(); n.setAttribute('href', want); f.replaceWith(n); }
-        var m = document.querySelector('meta[name="theme-color"]');
-        if (m) m.setAttribute('content', t === 'dark' ? '#161513' : '#F4F2EC');
       })();
     </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -29,9 +27,19 @@
     <meta name="color-scheme" content="light dark" />
     <!-- No apple-touch-icon / PNG / ICO on purpose: the only icon candidates are the transparent K SVGs above. -->
     <title>KABINET</title>
+    <style>
+      /* The entry is painted before any script runs: dark, then the K wakes at 200ms and the name flickers in from 1000ms.
+         React (src/components/Splash.tsx) takes over mid-sequence on the same clock. Keep the two in step. */
+      .boot { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; background: #0E0E0E; color: #EDE8DF; }
+      .boot svg { display: block; animation: boot-k 520ms cubic-bezier(0.2, 0, 0, 1) 200ms both; }
+      .boot b { display: flex; font: 600 13px/1 "Helvetica Neue", Helvetica, Arial, sans-serif; letter-spacing: 0.18em; margin-right: -0.18em; }
+      .boot b span { animation: boot-l 160ms linear both; }
+      @keyframes boot-k { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
+      @keyframes boot-l { 0% { opacity: 0; } 35% { opacity: 0.8; } 55% { opacity: 0.3; } 100% { opacity: 1; } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="boot" aria-hidden="true"><svg viewBox="0 0 74 132" width="26.91" height="48"><path fill="currentColor" d="M0 0 H10 V132 H0 Z M8 49 L60 10 L63 10 L68 16 L68 18 L15 59 L8 59 Z M8 59 L15 59 L74 106 L74 108 L69 114 L67 114 L8 69 Z"/></svg><b><span style="animation-delay:1000ms">K</span><span style="animation-delay:1045ms">A</span><span style="animation-delay:1090ms">B</span><span style="animation-delay:1135ms">I</span><span style="animation-delay:1180ms">N</span><span style="animation-delay:1225ms">E</span><span style="animation-delay:1270ms">T</span></b></div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
