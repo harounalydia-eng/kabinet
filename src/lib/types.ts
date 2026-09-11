@@ -58,6 +58,8 @@ export interface OwnedProduct {
   image?: ImageRef
   /** Set when added from a catalogue product. */
   productId?: string
+  /** The canonical record in Supabase catalog_products (what the product IS). Ownership stays here. */
+  catalogProductId?: string
   seed?: boolean
 }
 
