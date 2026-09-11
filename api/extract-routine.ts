@@ -50,8 +50,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   res.setHeader('Cache-Control', 'no-store')
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'POST only.' })
 
-  const supabaseUrl = process.env.SUPABASE_URL
-  const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY
+  // Public values only: the project URL and publishable key. The VITE_ names are the ones the frontend build already
+  // has on this Vercel project, so they double as a fallback. GEMINI_API_KEY has no such fallback — server-side only.
+  const supabaseUrl = process.env.SUPABASE_URL ?? process.env.VITE_SUPABASE_URL
+  const publishableKey = process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.VITE_SUPABASE_PUBLISHABLE_KEY
   const geminiKey = process.env.GEMINI_API_KEY
   if (!supabaseUrl || !publishableKey) return res.status(503).json({ ok: false, error: 'The extractor is not configured (SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY missing).' })
 
