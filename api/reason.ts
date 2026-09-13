@@ -70,12 +70,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!allow(userId)) return res.status(429).json({ ok: false, error: 'KABINET is thinking a lot for one hour. Try again a little later.' })
 
   try {
-    const { data, usage } = await geminiJson(geminiKey, MODEL, body.system, parts, body.schema, { maxOutputTokens: Math.min(8000, Number(body.maxOutputTokens) || 6000), temperature: typeof body.temperature === 'number' ? body.temperature : 0.2 })
-    return res.status(200).json({ ok: true, data, model: MODEL, usage })
+    const { data, usage, model } = await geminiJson(geminiKey, MODEL, body.system, parts, body.schema, { maxOutputTokens: Math.min(8000, Number(body.maxOutputTokens) || 6000), temperature: typeof body.temperature === 'number' ? body.temperature : 0.2 })
+    return res.status(200).json({ ok: true, data, model, usage })
   } catch (err) {
     const status = err instanceof GeminiFailure ? err.status : 502
     const message = err instanceof Error ? err.message : String(err)
     console.error('[reason] model failed', status, message)
-    return res.status(status === 429 ? 503 : 502).json({ ok: false, error: status === 429 ? 'The model is busy right now. Try again in a moment.' : "KABINET couldn't finish thinking. Try again.", detail: message.slice(0, 200) })
+    const quota = status === 429 || /quota/i.test(message)
+    return res.status(quota ? 503 : 502).json({ ok: false, error: quota ? "KABINET's intelligence has reached its daily limit. Try again later." : "KABINET couldn't finish thinking. Try again.", detail: message.slice(0, 200) })
   }
 }

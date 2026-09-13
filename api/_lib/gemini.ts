@@ -46,16 +46,39 @@ export class GeminiFailure extends Error { constructor(public status: number, me
 
 const BASE = 'https://generativelanguage.googleapis.com/v1beta'
 
-/** One structured call. Gemini's own Schema shape first (most reliable), standard JSON Schema second. */
-export async function geminiJson(apiKey: string, model: string, system: string, parts: Part[], schema: Record<string, unknown>, opts: { maxOutputTokens?: number; temperature?: number } = {}): Promise<{ data: unknown; usage: Record<string, unknown> | null }> {
+/** Models to try in order. Each has its own quota, so an exhausted primary does not take the product down. */
+export function modelChain(primary: string): string[] {
+  const extra = (process.env.KABINET_MODEL_FALLBACKS ?? 'gemini-3.1-flash-lite,gemini-2.5-flash').split(',').map((s) => s.trim()).filter(Boolean)
+  return [...new Set([primary, ...extra])]
+}
+
+const isQuota = (f: GeminiFailure | null) => !!f && (f.status === 429 || /quota|rate limit|RESOURCE_EXHAUSTED/i.test(f.message))
+
+/** One structured call across the model chain. Gemini's own Schema shape first (most reliable), standard JSON Schema second. */
+export async function geminiJson(apiKey: string, primaryModel: string, system: string, parts: Part[], schema: Record<string, unknown>, opts: { maxOutputTokens?: number; temperature?: number } = {}): Promise<{ data: unknown; usage: Record<string, unknown> | null; model: string }> {
+  let lastModelFailure: GeminiFailure | null = null
+  for (const model of modelChain(primaryModel)) {
+    try {
+      const r = await geminiJsonOnce(apiKey, model, system, parts, schema, opts)
+      return { ...r, model }
+    } catch (e) {
+      lastModelFailure = e instanceof GeminiFailure ? e : new GeminiFailure(502, String(e))
+      if (!isQuota(lastModelFailure)) throw lastModelFailure // a real error, not a full quota: do not mask it
+      console.warn('[gemini] quota exhausted on', model, '→ next model')
+    }
+  }
+  throw lastModelFailure ?? new GeminiFailure(503, 'No model available.')
+}
+
+async function geminiJsonOnce(apiKey: string, model: string, system: string, parts: Part[], schema: Record<string, unknown>, opts: { maxOutputTokens?: number; temperature?: number } = {}): Promise<{ data: unknown; usage: Record<string, unknown> | null }> {
   const attempts: Array<Record<string, unknown>> = [{ responseSchema: toGeminiSchema(schema) }, { responseJsonSchema: sanitizeStandard(schema) }]
   let last: GeminiFailure | null = null
   for (const cfg of attempts) {
     // Transient failures (busy model, 5xx, a dropped connection) are retried with a short backoff before anyone sees them.
     let res: Response | null = null
     let body: Record<string, unknown> = {}
-    for (let attempt = 0; attempt < 3; attempt++) {
-      if (attempt) await new Promise((r) => setTimeout(r, 1200 * attempt))
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt) await new Promise((r) => setTimeout(r, 1500))
       try {
         res = await fetch(`${BASE}/models/${model}:generateContent`, {
           method: 'POST',

@@ -82,12 +82,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   ].filter(Boolean).join('\n') })
 
   try {
-    const { data, usage } = await geminiVisionJson(geminiKey, MODEL, SYSTEM, parts, SCHEMA as unknown as Record<string, unknown>, toGeminiSchema)
-    return res.status(200).json({ ok: true, analysis: data, model: MODEL, usage })
+    const { data, usage, model } = await geminiVisionJson(geminiKey, MODEL, SYSTEM, parts, SCHEMA as unknown as Record<string, unknown>, toGeminiSchema)
+    return res.status(200).json({ ok: true, analysis: data, model, usage })
   } catch (err) {
     const status = (err as { status?: number }).status ?? 502
     const message = err instanceof Error ? err.message : String(err)
     console.error('[analyze-skin] model failed', status, message) // message only — never the images
-    return res.status(status >= 400 && status < 600 ? (status === 429 ? 503 : 502) : 502).json({ ok: false, error: `KABINET couldn't read these photographs right now. ${status === 429 ? 'The model is busy.' : ''}`.trim(), detail: message.slice(0, 200) })
+    const quota = status === 429 || /quota/i.test(message)
+    return res.status(quota ? 503 : 502).json({ ok: false, error: quota ? "KABINET's intelligence has reached its daily limit. Try again later." : "KABINET couldn't read these photographs right now. Try again.", detail: message.slice(0, 200) })
   }
 }

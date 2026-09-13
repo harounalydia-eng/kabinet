@@ -73,16 +73,33 @@ Return JSON only, matching the schema.`
 
 /** Gemini `generateContent` with images + JSON schema. Standard JSON Schema first, then Gemini's own Schema shape. */
 export async function geminiVisionJson(
-  apiKey: string, model: string, system: string, parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }>,
+  apiKey: string, primaryModel: string, system: string, parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }>,
   schema: Record<string, unknown>, toGeminiSchema: (s: Record<string, unknown>) => Record<string, unknown>, maxOutputTokens = 4000,
+): Promise<{ data: unknown; usage: Record<string, unknown> | null; model: string }> {
+  const chain = [...new Set([primaryModel, ...(process.env.KABINET_MODEL_FALLBACKS ?? 'gemini-3.1-flash-lite,gemini-2.5-flash').split(',').map((s) => s.trim()).filter(Boolean)])]
+  let lastErr: (Error & { status?: number }) | null = null
+  for (const model of chain) {
+    try { return { ...(await visionOnce(apiKey, model, system, parts, schema, toGeminiSchema, maxOutputTokens)), model } }
+    catch (e) {
+      lastErr = e as Error & { status?: number }
+      if (!(lastErr.status === 429 || /quota|RESOURCE_EXHAUSTED/i.test(lastErr.message))) throw lastErr
+      console.warn('[analyze-skin] quota exhausted on', model, '→ next model')
+    }
+  }
+  throw lastErr ?? Object.assign(new Error('No model available.'), { status: 503 })
+}
+
+async function visionOnce(
+  apiKey: string, model: string, system: string, parts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }>,
+  schema: Record<string, unknown>, toGeminiSchema: (s: Record<string, unknown>) => Record<string, unknown>, maxOutputTokens: number,
 ): Promise<{ data: unknown; usage: Record<string, unknown> | null }> {
   const attempts: Array<Record<string, unknown>> = [{ responseJsonSchema: schema }, { responseSchema: toGeminiSchema(schema) }]
   let last: { status: number; message: string } | null = null
   for (const cfg of attempts) {
     let res: Response | null = null
     let body: Record<string, unknown> = {}
-    for (let attempt = 0; attempt < 3; attempt++) {
-      if (attempt) await new Promise((r) => setTimeout(r, 1500 * attempt))
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt) await new Promise((r) => setTimeout(r, 1500))
       try {
         res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
           method: 'POST',
