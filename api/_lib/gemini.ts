@@ -51,17 +51,32 @@ export async function geminiJson(apiKey: string, model: string, system: string, 
   const attempts: Array<Record<string, unknown>> = [{ responseSchema: toGeminiSchema(schema) }, { responseJsonSchema: sanitizeStandard(schema) }]
   let last: GeminiFailure | null = null
   for (const cfg of attempts) {
-    const res = await fetch(`${BASE}/models/${model}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: 'user', parts }],
-        generationConfig: { temperature: opts.temperature ?? 0.2, responseMimeType: 'application/json', maxOutputTokens: opts.maxOutputTokens ?? 6000, ...cfg },
-      }),
-      signal: AbortSignal.timeout(55_000),
-    })
-    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>
+    // Transient failures (busy model, 5xx, a dropped connection) are retried with a short backoff before anyone sees them.
+    let res: Response | null = null
+    let body: Record<string, unknown> = {}
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt) await new Promise((r) => setTimeout(r, 1200 * attempt))
+      try {
+        res = await fetch(`${BASE}/models/${model}:generateContent`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: system }] },
+            contents: [{ role: 'user', parts }],
+            generationConfig: { temperature: opts.temperature ?? 0.2, responseMimeType: 'application/json', maxOutputTokens: opts.maxOutputTokens ?? 6000, ...cfg },
+          }),
+          signal: AbortSignal.timeout(45_000),
+        })
+      } catch (e) {
+        last = new GeminiFailure(503, e instanceof Error && e.name === 'TimeoutError' ? 'The model took too long.' : 'The model did not answer.')
+        res = null
+        continue
+      }
+      body = (await res.json().catch(() => ({}))) as Record<string, unknown>
+      if (res.ok || !(res.status === 429 || res.status >= 500)) break
+      last = new GeminiFailure(res.status, ((body.error as { message?: string } | undefined)?.message ?? `HTTP ${res.status}`).slice(0, 300))
+    }
+    if (!res) throw last ?? new GeminiFailure(503, 'The model did not answer.')
     if (!res.ok) {
       const message = ((body.error as { message?: string } | undefined)?.message ?? `HTTP ${res.status}`).slice(0, 300)
       last = new GeminiFailure(res.status, message)

@@ -79,17 +79,31 @@ export async function geminiVisionJson(
   const attempts: Array<Record<string, unknown>> = [{ responseJsonSchema: schema }, { responseSchema: toGeminiSchema(schema) }]
   let last: { status: number; message: string } | null = null
   for (const cfg of attempts) {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: system }] },
-        contents: [{ role: 'user', parts }],
-        generationConfig: { temperature: 0.2, responseMimeType: 'application/json', maxOutputTokens, ...cfg },
-      }),
-      signal: AbortSignal.timeout(55_000),
-    })
-    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>
+    let res: Response | null = null
+    let body: Record<string, unknown> = {}
+    for (let attempt = 0; attempt < 3; attempt++) {
+      if (attempt) await new Promise((r) => setTimeout(r, 1500 * attempt))
+      try {
+        res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: system }] },
+            contents: [{ role: 'user', parts }],
+            generationConfig: { temperature: 0.2, responseMimeType: 'application/json', maxOutputTokens, ...cfg },
+          }),
+          signal: AbortSignal.timeout(45_000),
+        })
+      } catch (e) {
+        last = { status: 503, message: e instanceof Error && e.name === 'TimeoutError' ? 'The model took too long.' : 'The model did not answer.' }
+        res = null
+        continue
+      }
+      body = (await res.json().catch(() => ({}))) as Record<string, unknown>
+      if (res.ok || !(res.status === 429 || res.status >= 500)) break
+      last = { status: res.status, message: ((body.error as { message?: string } | undefined)?.message ?? `HTTP ${res.status}`).slice(0, 300) }
+    }
+    if (!res) throw Object.assign(new Error(last?.message ?? 'The model did not answer.'), { status: last?.status ?? 503 })
     if (!res.ok) {
       const message = ((body.error as { message?: string } | undefined)?.message ?? `HTTP ${res.status}`).slice(0, 300)
       last = { status: res.status, message }
